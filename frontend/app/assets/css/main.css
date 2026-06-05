@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-500: #FF661A;
+  --brand-600: #E85710;
+  --ink-900: #1F2937;
+}
+
+html, body, #__nuxt {
+  height: 100%;
+}
+
+body {
+  @apply bg-white text-ink-900 font-sans antialiased;
+}
+
+a {
+  @apply text-brand-600 hover:text-brand-700;
+}
+
+@layer components {
+  .container-page {
+    @apply max-w-8xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+  .btn-primary { @apply btn bg-brand-500 hover:bg-brand-600 text-white px-5 py-2.5; }
+  .btn-secondary { @apply btn bg-ink-900 hover:bg-ink-800 text-white px-5 py-2.5; }
+  .btn-outline { @apply btn border border-gray-200 hover:bg-gray-50 text-ink-900 px-5 py-2.5; }
+  .btn-ghost { @apply btn text-ink-900 hover:bg-gray-100 px-4 py-2; }
+  .btn-success { @apply btn bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5; }
+  .btn-danger { @apply btn bg-red-600 hover:bg-red-700 text-white px-5 py-2.5; }
+
+  .input,
+  .textarea,
+  .select {
+    @apply w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-ink-900 placeholder-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none;
+  }
+  .label {
+    @apply block text-sm font-medium text-ink-900 mb-1.5;
+  }
+
+  .card {
+    @apply bg-white border border-gray-100 rounded-xl shadow-soft;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-pending { @apply badge bg-amber-100 text-amber-800; }
+  .badge-approved { @apply badge bg-emerald-100 text-emerald-800; }
+  .badge-rejected { @apply badge bg-red-100 text-red-800; }
+  .badge-draft { @apply badge bg-gray-100 text-gray-700; }
+}

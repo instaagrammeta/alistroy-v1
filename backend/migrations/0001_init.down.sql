@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS tracking_events;
+DROP TABLE IF EXISTS settings;
+DROP TABLE IF EXISTS favorites;
+DROP TABLE IF EXISTS reviews;
+DROP TABLE IF EXISTS product_images;
+DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS sellers;
+DROP TABLE IF EXISTS users;

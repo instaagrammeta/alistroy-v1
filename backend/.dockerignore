@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+bin/
+tmp/
+uploads/*
+!uploads/.gitkeep
+*.log
+.git
+.gitignore
+README.md
