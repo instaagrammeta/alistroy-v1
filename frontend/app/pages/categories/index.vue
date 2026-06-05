@@ -5,7 +5,7 @@ const config = useRuntimeConfig()
 const { t } = useI18n()
 
 const { data } = await useAsyncData('all-categories', () =>
-  $fetch<{ data: Category[] }>('/categories', { baseURL: config.public.apiBase })
+  $fetch<{ data: Category[] }>('/categories', { baseURL: useApiBase() })
 )
 
 const categories = computed<Category[]>(() => data.value?.data || [])

@@ -89,7 +89,7 @@ export const useAuthStore = defineStore('auth', {
     async login(email: string, password: string) {
       const config = useRuntimeConfig()
       const res = await $fetch<{ data: TokenPair }>('/auth/login', {
-        baseURL: config.public.apiBase,
+        baseURL: useApiBase(),
         method: 'POST',
         body: { email, password },
       })
@@ -109,7 +109,7 @@ export const useAuthStore = defineStore('auth', {
     }) {
       const config = useRuntimeConfig()
       const res = await $fetch<{ data: TokenPair }>('/auth/register', {
-        baseURL: config.public.apiBase,
+        baseURL: useApiBase(),
         method: 'POST',
         body: payload,
       })
@@ -123,7 +123,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         const config = useRuntimeConfig()
         const res = await $fetch<{ data: TokenPair }>('/auth/refresh', {
-          baseURL: config.public.apiBase,
+          baseURL: useApiBase(),
           method: 'POST',
           body: { refresh_token: this.refreshToken },
         })

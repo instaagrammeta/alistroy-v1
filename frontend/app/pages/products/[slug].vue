@@ -15,7 +15,7 @@ interface ProductBundle {
 }
 
 const { data: bundle, error } = await useAsyncData(`product-${slug}`, () =>
-  $fetch<{ data: ProductBundle }>(`/products/${slug}`, { baseURL: config.public.apiBase })
+  $fetch<{ data: ProductBundle }>(`/products/${slug}`, { baseURL: useApiBase() })
 )
 
 if (error.value) {
@@ -27,12 +27,12 @@ const avgRating = computed<number>(() => (bundle.value as any)?.data?.avg_rating
 const reviewCount = computed<number>(() => (bundle.value as any)?.data?.review_count ?? 0)
 
 const { data: relatedRes } = await useAsyncData(`product-${slug}-related`, () =>
-  $fetch(`/products/id/${product.value?.id}/related`, { baseURL: config.public.apiBase, query: { limit: 8 } })
+  $fetch(`/products/id/${product.value?.id}/related`, { baseURL: useApiBase(), query: { limit: 8 } })
 )
 const related = computed<Product[]>(() => (relatedRes.value as any)?.data || [])
 
 const { data: reviewsRes, refresh: refreshReviews } = await useAsyncData(`product-${slug}-reviews`, () =>
-  $fetch(`/products/id/${product.value?.id}/reviews`, { baseURL: config.public.apiBase, query: { page_size: 10 } })
+  $fetch(`/products/id/${product.value?.id}/reviews`, { baseURL: useApiBase(), query: { page_size: 10 } })
 )
 const reviews = computed<Review[]>(() => (reviewsRes.value as any)?.data || [])
 
@@ -58,7 +58,7 @@ onMounted(async () => {
   await favorites.loadFromServer()
   try {
     await $fetch(`/products/id/${product.value.id}/track`, {
-      baseURL: config.public.apiBase,
+      baseURL: useApiBase(),
       method: 'POST',
       body: { event: 'view' },
     })

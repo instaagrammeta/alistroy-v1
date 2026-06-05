@@ -25,12 +25,12 @@ const buildQuery = () => {
 
 const fetchProducts = () =>
   $fetch<PaginatedResponse<Product>>('/products', {
-    baseURL: config.public.apiBase,
+    baseURL: useApiBase(),
     query: buildQuery(),
   })
 
 const fetchCats = () =>
-  $fetch<{ data: Category[] }>('/categories', { baseURL: config.public.apiBase })
+  $fetch<{ data: Category[] }>('/categories', { baseURL: useApiBase() })
 
 const { data: list, refresh } = await useAsyncData('products-list', fetchProducts, {
   watch: [page, sort, q, categorySlug, minPrice, maxPrice],

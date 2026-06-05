@@ -14,7 +14,7 @@ const { data } = await useAsyncData(
   'search',
   () =>
     $fetch<PaginatedResponse<Product>>('/products', {
-      baseURL: config.public.apiBase,
+      baseURL: useApiBase(),
       query: { q: q.value || undefined, page: page.value, page_size: pageSize },
     }),
   { watch: [q, page] }

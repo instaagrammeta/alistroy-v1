@@ -8,7 +8,7 @@ import type { FetchContext, FetchOptions } from 'ofetch'
  */
 export const useApi = () => {
   const config = useRuntimeConfig()
-  const baseURL = config.public.apiBase
+  const baseURL = useApiBase()
 
   // Lazy access to avoid circular imports during SSR.
   const getStores = async () => {

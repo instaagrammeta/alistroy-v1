@@ -36,7 +36,7 @@ export const useSettingsStore = defineStore('settings', {
       const config = useRuntimeConfig()
       try {
         const res = await $fetch<{ data: SettingsMap }>('/settings/public', {
-          baseURL: config.public.apiBase,
+          baseURL: useApiBase(),
         })
         this.values = res.data || {}
         this.loaded = true

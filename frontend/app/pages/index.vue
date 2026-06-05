@@ -6,7 +6,7 @@ const settings = useSettingsStore()
 const config = useRuntimeConfig()
 
 const baseFetch = (url: string, query?: Record<string, any>) =>
-  $fetch(url, { baseURL: config.public.apiBase, query })
+  $fetch(url, { baseURL: useApiBase(), query })
 
 const { data: featured } = await useAsyncData('home-featured', () =>
   baseFetch('/products', { featured: true, page_size: 8, sort: 'newest' })

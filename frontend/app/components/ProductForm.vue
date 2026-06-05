@@ -34,7 +34,7 @@ const { t } = useI18n()
 const { categoryTitle } = useLocaleField()
 
 const { data: catsRes } = await useAsyncData('form-cats', () =>
-  $fetch<{ data: Category[] }>('/categories', { baseURL: config.public.apiBase })
+  $fetch<{ data: Category[] }>('/categories', { baseURL: useApiBase() })
 )
 const cats = computed<Category[]>(() => catsRes.value?.data || [])
 

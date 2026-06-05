@@ -5,7 +5,7 @@ interface IdSlug { slug: string; updated_at?: string }
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
-  const apiBase = config.public.apiBase
+  const apiBase = useApiBase()
   const siteUrl = (config.public.siteUrl as string).replace(/\/$/, '')
 
   const safeFetch = async <T>(path: string): Promise<T | null> => {

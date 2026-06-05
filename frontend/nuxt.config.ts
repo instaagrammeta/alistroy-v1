@@ -49,6 +49,9 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    // Server-only — used for in-cluster SSR fetches that must reach the
+    // backend container directly (since '/api/v1' has no host on the server).
+    apiBaseInternal: process.env.NUXT_API_BASE_INTERNAL || 'http://backend:8080/api/v1',
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api/v1',
       siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000',

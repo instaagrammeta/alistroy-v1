@@ -13,7 +13,7 @@ const sort = ref(typeof route.query.sort === 'string' ? route.query.sort : 'newe
 const pageSize = 24
 
 const { data: cat } = await useAsyncData(`cat-${slug}`, () =>
-  $fetch<{ data: Category }>(`/categories/${slug}`, { baseURL: config.public.apiBase })
+  $fetch<{ data: Category }>(`/categories/${slug}`, { baseURL: useApiBase() })
 )
 const category = computed<Category | null>(() => cat.value?.data || null)
 
@@ -21,7 +21,7 @@ const { data: list } = await useAsyncData(
   `cat-products-${slug}`,
   () =>
     $fetch<PaginatedResponse<Product>>('/products', {
-      baseURL: config.public.apiBase,
+      baseURL: useApiBase(),
       query: { category: slug, page: page.value, page_size: pageSize, sort: sort.value },
     }),
   { watch: [page, sort] }

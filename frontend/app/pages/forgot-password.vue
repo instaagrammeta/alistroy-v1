@@ -17,7 +17,7 @@ const requestReset = async () => {
   loading.value = true
   try {
     const res: any = await $fetch('/auth/forgot-password', {
-      baseURL: config.public.apiBase,
+      baseURL: useApiBase(),
       method: 'POST',
       body: { email: email.value },
     })
@@ -41,7 +41,7 @@ const doReset = async () => {
   loading.value = true
   try {
     await $fetch('/auth/reset-password', {
-      baseURL: config.public.apiBase,
+      baseURL: useApiBase(),
       method: 'POST',
       body: { token: resetToken.value, new_password: newPassword.value },
     })

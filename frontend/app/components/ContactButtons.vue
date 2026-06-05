@@ -12,7 +12,7 @@ const trackEvent = async (event: 'phone_click' | 'whatsapp_click') => {
   try {
     const config = useRuntimeConfig()
     await $fetch(`/products/id/${props.product.id}/track`, {
-      baseURL: config.public.apiBase,
+      baseURL: useApiBase(),
       method: 'POST',
       body: { event },
     })

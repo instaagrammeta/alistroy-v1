@@ -15,7 +15,7 @@ const sort = ref(typeof route.query.sort === 'string' ? route.query.sort : 'newe
 const pageSize = 12
 
 const { data: sellerRes, error } = await useAsyncData(`seller-${slug}`, () =>
-  $fetch<{ data: Seller }>(`/sellers/${slug}`, { baseURL: config.public.apiBase })
+  $fetch<{ data: Seller }>(`/sellers/${slug}`, { baseURL: useApiBase() })
 )
 if (error.value) {
   throw createError({ statusCode: 404, statusMessage: 'Seller not found' })
@@ -26,7 +26,7 @@ const { data: list } = await useAsyncData(
   `seller-${slug}-products`,
   () =>
     $fetch<PaginatedResponse<Product>>('/products', {
-      baseURL: config.public.apiBase,
+      baseURL: useApiBase(),
       query: { seller: slug, page: page.value, page_size: pageSize, sort: sort.value },
     }),
   { watch: [page, sort] }
