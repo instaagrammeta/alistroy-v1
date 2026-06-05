@@ -1,8 +1,8 @@
-# AliStroy — Enterprise Construction Marketplace (Backend)
+# AliStroy — Enterprise Construction Marketplace + CRM
 
 AliStroy is a multi-vendor construction-materials marketplace + CRM for Tajikistan.
-This repository currently contains the **Backend (Phase 1)**. The Nuxt 4 frontend
-will be added in Phase 2.
+This repository contains the **full stack**: a Go (Gin) backend and a Nuxt 4
+(Vue 3 + TypeScript + Tailwind + Pinia + SSR) frontend.
 
 The platform is contact-driven: customers browse products and reach the seller
 (or the marketplace) by phone / WhatsApp / Telegram. Admin moderates every
@@ -10,19 +10,23 @@ product, sets the public sale price, and decides whose contacts are shown.
 
 ## Tech stack
 
-- **Go 1.22** + **Gin**
-- **PostgreSQL** (GORM) + **Redis**
-- **JWT** auth (access + refresh), role-based access control
-- Clean architecture: **handlers → services → repositories → models**
-- **WebSockets** (chat + notifications) via Redis pub/sub
-- **Excel export** (excelize), **printable receipts** (HTML/print-to-PDF)
-- **Google OAuth2** customer login (optional)
-- **Docker**, **Docker Compose**, **Nginx**
+**Backend**
+- Go 1.22 + Gin, PostgreSQL (GORM), Redis
+- JWT auth (access + refresh), role-based access control
+- Clean architecture: handlers → services → repositories → models
+- WebSockets (chat + notifications) via Redis pub/sub
+- Excel export (excelize), printable receipts, Google OAuth2 (optional)
+
+**Frontend**
+- Nuxt 4 / Vue 3 / TypeScript / TailwindCSS / Pinia / @nuxtjs/i18n / SSR
+- Animated hero slider (clickable banners, device-specific images), category
+  sidebar, promo banner grid, mobile-first responsive design
+- Public storefront, customer cart/checkout/orders/chat, seller dashboard,
+  driver dashboard, full admin panel (CRM)
 
 ## Languages
 
-All public content is bilingual: **Tajik (default)** and **Russian**
-(`name_tj` / `name_ru`, `description_tj` / `description_ru`, etc.).
+Bilingual everywhere: **Tajik (default)** and **Russian**.
 
 ## Repository layout
 
@@ -103,10 +107,12 @@ docker compose up -d --build
 
 Then:
 
+- Public site: `http://YOUR_SERVER/`
+- Seller dashboard: `http://YOUR_SERVER/seller`
+- Driver dashboard: `http://YOUR_SERVER/driver`
+- Admin panel: `http://YOUR_SERVER/admin`
 - API base: `http://YOUR_SERVER/api/v1`
-- Health: `http://YOUR_SERVER/health` → `{"status":"ok"}`
-- Robots: `http://YOUR_SERVER/robots.txt`
-- Sitemap: `http://YOUR_SERVER/sitemap.xml`
+- Health: `http://YOUR_SERVER/health`
 
 The backend auto-runs migrations and seeds the admin account (`ADMIN_EMAIL` /
 `ADMIN_PASSWORD`), default settings, and 15 root categories on first boot.

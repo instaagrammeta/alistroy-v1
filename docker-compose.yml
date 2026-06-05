@@ -83,13 +83,37 @@ services:
     networks:
       - alistroy-net
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api/v1}
+        NUXT_PUBLIC_SITE_URL: ${NUXT_PUBLIC_SITE_URL:-http://localhost}
+        NUXT_PUBLIC_UPLOADS_BASE: ${NUXT_PUBLIC_UPLOADS_BASE:-/uploads}
+        NUXT_PUBLIC_DEFAULT_LOCALE: ${NUXT_PUBLIC_DEFAULT_LOCALE:-tg}
+    container_name: alistroy-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NUXT_HOST: 0.0.0.0
+      NUXT_PORT: 3000
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api/v1}
+      NUXT_PUBLIC_SITE_URL: ${NUXT_PUBLIC_SITE_URL:-http://localhost}
+      NUXT_PUBLIC_UPLOADS_BASE: ${NUXT_PUBLIC_UPLOADS_BASE:-/uploads}
+      NUXT_PUBLIC_DEFAULT_LOCALE: ${NUXT_PUBLIC_DEFAULT_LOCALE:-tg}
+      NUXT_API_BASE_INTERNAL: http://backend:8080/api/v1
+    networks:
+      - alistroy-net
+
   nginx:
     image: nginx:1.27-alpine
     container_name: alistroy-nginx
     restart: unless-stopped
     depends_on:
-      backend:
-        condition: service_started
+      - backend
+      - frontend
     ports:
       - "${NGINX_HTTP_PORT:-80}:80"
     volumes:

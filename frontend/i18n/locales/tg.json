@@ -1,0 +1,121 @@
+{
+  "site": { "name": "AliStroy", "tagline": "Бозори маводи сохтмонии Тоҷикистон" },
+  "nav": {
+    "home": "Асосӣ", "catalog": "Каталог", "categories": "Категорияҳо",
+    "sellers": "Фурӯшандагон", "brands": "Брендҳо", "favorites": "Дӯстдоштаҳо",
+    "cart": "Сабад", "search": "Ҷустуҷӯ", "login": "Воридшавӣ", "register": "Бақайдгирӣ",
+    "profile": "Профил", "logout": "Баромадан", "orders": "Фармоишҳо",
+    "admin_panel": "Админ панел", "seller_panel": "Кабинети фурӯшанда",
+    "driver_panel": "Кабинети ронанда", "become_seller": "Фурӯшанда шавед"
+  },
+  "common": {
+    "loading": "Бор шуда истодааст…", "save": "Захира", "cancel": "Бекор", "edit": "Таҳрир",
+    "delete": "Нест кардан", "create": "Сохтан", "submit": "Фиристодан", "search": "Ҷустуҷӯ",
+    "search_placeholder": "Семент, хишт, ранг…", "yes": "Ҳа", "no": "Не", "back": "Бозгашт",
+    "all": "Ҳама", "view": "Дидан", "close": "Пӯшидан", "from": "Аз", "to": "То",
+    "filters": "Филтрҳо", "apply": "Татбиқ", "reset": "Тоза кардан", "currency": "сомонӣ",
+    "no_results": "Чизе ёфт нашуд", "required": "Ҳатмист", "optional": "Ихтиёрӣ",
+    "results_count": "{count} натиҷа", "active": "Фаъол", "inactive": "Ғайрифаъол",
+    "status": "Статус", "actions": "Амалҳо", "name": "Ном", "phone": "Телефон",
+    "price": "Нарх", "quantity": "Шумора", "total": "Ҷамъ", "date": "Сана", "add": "Илова",
+    "confirm_delete": "Шумо мутмаин ҳастед?", "saved": "Захира шуд", "select": "Интихоб…"
+  },
+  "home": {
+    "popular_categories": "Категорияҳои машҳур", "featured_products": "Молҳои тавсияшаванда",
+    "latest_products": "Молҳои нав", "top_sellers": "Фурӯшандагони беҳтарин",
+    "all_categories": "Ҳамаи категорияҳо", "advantages_title": "Чаро AliStroy?",
+    "advantage_1_title": "Тамоси мустақим", "advantage_1_text": "Бо фурӯшанда зуд тамос гиред — занг, WhatsApp ё Telegram.",
+    "advantage_2_title": "Молҳои санҷидашуда", "advantage_2_text": "Ҳар як мол аз ҷониби маъмурият санҷида мешавад.",
+    "advantage_3_title": "Фурӯшандагони маҳаллӣ", "advantage_3_text": "Ҳамаи фурӯшандагон дар Тоҷикистон.",
+    "advantage_4_title": "Расонидан", "advantage_4_text": "Расонидани фармоиш ба тамоми шаҳр.",
+    "contact_title": "Бо мо тамос гиред", "contact_text": "Барои ҳамкорӣ ва дастгирӣ ба мо нависед."
+  },
+  "catalog": {
+    "title": "Каталоги маҳсулот", "category": "Категория", "subcategory": "Зеркатегория",
+    "brand": "Бренд", "price_range": "Нарх", "availability": "Дастрасӣ",
+    "in_stock": "Дастрас аст", "out_of_stock": "Тамом шудааст", "seller": "Фурӯшанда",
+    "sort": "Тартиб", "sort_newest": "Нав ба кӯҳна", "sort_oldest": "Кӯҳна ба нав",
+    "sort_price_asc": "Нарх: арзон ба қимат", "sort_price_desc": "Нарх: қимат ба арзон",
+    "sort_popular": "Маъмултарин"
+  },
+  "product": {
+    "call": "Занг занед", "whatsapp": "WhatsApp", "telegram": "Telegram",
+    "add_to_cart": "Ба сабад", "in_cart": "Дар сабад", "favorites_add": "Ба дӯстдоштаҳо",
+    "favorites_remove": "Аз дӯстдоштаҳо", "description": "Тавсиф", "characteristics": "Хусусиятҳо",
+    "in_stock_n": "Дар анбор: {n} {unit}", "sku": "Артикул", "related": "Молҳои монанд",
+    "reviews": "Тавсияҳо", "leave_review": "Тавсия гузоред", "rating": "Баҳо", "comment": "Шарҳ",
+    "submit_review": "Фиристодан", "no_reviews": "Ҳоло тавсия нест", "review_pending": "Тавсия қабул шуд ва дар интизори тасдиқ аст."
+  },
+  "seller": {
+    "products": "Маҳсулоти фурӯшанда", "since": "Аз {date}", "contact": "Тамос", "address": "Суроға", "city": "Шаҳр"
+  },
+  "cart": {
+    "title": "Сабади ман", "empty": "Сабади шумо холист", "subtotal": "Зерҷамъ",
+    "checkout": "Фиристодани заявка", "remove": "Хориҷ кардан", "continue": "Идомаи харид",
+    "delivery_address": "Суроғаи расонидан", "notes": "Эзоҳ", "order_sent": "Заявка фиристода шуд!"
+  },
+  "auth": {
+    "login_title": "Воридшавӣ", "register_title": "Бақайдгирӣ", "identifier": "Телефон ё Email",
+    "email": "Email", "password": "Парол", "name": "Ном ва насаб", "phone": "Рақами телефон",
+    "address": "Суроға", "city": "Шаҳр", "submit_login": "Ворид шавед", "submit_register": "Сабти ном",
+    "have_account": "Қаблан ҳисоб доред?", "no_account": "Ҳисоб надоред?",
+    "google": "Бо Google ворид шавед", "logout_done": "Шумо баромадед",
+    "old_password": "Пароли ҷорӣ", "new_password": "Пароли нав", "change_password": "Тағйири парол",
+    "complete_profile": "Профилро пурра кунед", "complete_profile_text": "Барои идома рақами телефон ва суроғаро ворид кунед."
+  },
+  "favorites": { "title": "Дӯстдоштаҳо", "empty": "Дӯстдошта надоред" },
+  "search": { "title": "Натиҷаҳои ҷустуҷӯ", "for": "барои «{q}»" },
+  "footer": {
+    "about": "AliStroy — бозори бузурги маводи сохтмонии Тоҷикистон.",
+    "links": "Силсилаҳо", "for_sellers": "Барои фурӯшандагон", "contacts": "Тамос",
+    "rights": "© {year} AliStroy. Ҳамаи ҳуқуқҳо ҳифз шудаанд."
+  },
+  "seller_panel": {
+    "dashboard": "Тахта", "products": "Маҳсулот", "add_product": "Илова кардани мол",
+    "edit_product": "Таҳрири мол", "profile": "Профили мағоза", "stats": "Статистика",
+    "status_draft": "Лоиҳа", "status_pending": "Дар интизор", "status_approved": "Тасдиқшуда",
+    "status_rejected": "Рад шудааст", "name_tj": "Ном (тоҷикӣ)", "name_ru": "Ном (русӣ)",
+    "desc_tj": "Тавсиф (тоҷикӣ)", "desc_ru": "Тавсиф (русӣ)", "category": "Категория",
+    "subcategory": "Зеркатегория", "brand": "Бренд", "price": "Нархи фурӯш", "cost": "Нархи харид",
+    "stock": "Захира", "min_stock": "Сатҳи минимум", "sku": "Артикул", "unit": "Воҳид",
+    "currency": "Асъор", "discount": "Тахфиф (%)", "available": "Дастрас", "images": "Тасвирҳо",
+    "upload_image": "Тасвир бор кунед", "save_product": "Захира", "submitted": "Барои санҷиш фиристода шуд",
+    "low_stock": "Захираи кам", "views": "Намоишҳо", "phone_clicks": "Зангҳо", "whatsapp_clicks": "WhatsApp",
+    "telegram_clicks": "Telegram", "total_products": "Ҳамаи молҳо", "approved": "Тасдиқшуда", "pending": "Дар интизор"
+  },
+  "driver_panel": {
+    "dashboard": "Тахта", "new_orders": "Фармоишҳои нав", "assigned": "Таъиншуда",
+    "completed": "Анҷомшуда", "my_orders": "Фармоишҳои ман", "mark_on_delivery": "Дар роҳ",
+    "mark_completed": "Анҷом", "vehicle": "Нақлиёт"
+  },
+  "admin": {
+    "dashboard": "Тахтаи назоратӣ", "users": "Корбарон", "sellers": "Фурӯшандагон",
+    "customers": "Муштариён", "drivers": "Ронандагон", "products": "Маҳсулот",
+    "categories": "Категорияҳо", "subcategories": "Зеркатегорияҳо", "brands": "Брендҳо",
+    "banners": "Банерҳо", "orders": "Заявкаҳо", "reviews": "Тавсияҳо", "chat": "Чат",
+    "reports": "Ҳисоботҳо", "board": "Доскаи визуалӣ", "settings": "Танзимот",
+    "approve": "Тасдиқ", "reject": "Рад кардан", "moderate": "Модератсия",
+    "contact_routing": "Маршрутизатсияи тамос", "contact_admin": "Маркетплейс (админ)",
+    "contact_seller": "Фурӯшанда", "rejection_note": "Сабаби рад", "sale_price": "Нархи фурӯш",
+    "phone": "Телефон", "whatsapp": "WhatsApp", "telegram": "Telegram",
+    "logo": "Логотип", "favicon": "Favicon", "site_name": "Номи сайт", "tagline": "Шиор",
+    "marketplace_phone": "Телефони маркетплейс", "marketplace_whatsapp": "WhatsApp маркетплейс",
+    "marketplace_telegram": "Telegram маркетплейс", "save_settings": "Захира кардани танзимот",
+    "settings_saved": "Танзимот захира шуд", "export": "Экспорт ба Excel", "income": "Даромад",
+    "expense": "Хароҷот", "purchase": "Харид", "profit": "Фоида", "preset_today": "Имрӯз",
+    "preset_week": "Ҳафта", "preset_month": "Моҳ", "preset_custom": "Худинтихоб", "new_product": "Маҳсулоти нав",
+    "new_seller": "Фурӯшандаи нав", "new_customer": "Муштарии нав", "new_driver": "Ронандаи нав",
+    "new_order": "Заявкаи нав", "new_banner": "Банери нав", "new_category": "Категорияи нав",
+    "select_seller": "Интихоби фурӯшанда", "select_customer": "Интихоби муштарӣ",
+    "select_driver": "Таъини ронанда", "receipt": "Чек", "print": "Чоп", "assign_driver": "Таъини ронанда",
+    "company": "Ширкат", "market": "Бозор", "login": "Логин", "password": "Парол", "notes": "Эзоҳ",
+    "position": "Ҷойгиршавӣ", "link": "Силка", "sort_order": "Тартиб", "desktop_image": "Тасвири компютер",
+    "tablet_image": "Тасвири планшет", "mobile_image": "Тасвири мобилӣ", "full_name": "Ном ва насаб",
+    "age": "Сину сол", "add_product_to_order": "Илова кардани мол", "search_product": "Ҷустуҷӯи маҳсулот…"
+  },
+  "order_status": {
+    "new": "Нав", "processing": "Дар коркард", "assigned": "Таъиншуда",
+    "on_delivery": "Дар роҳ", "completed": "Анҷом", "cancelled": "Бекор"
+  },
+  "lang": { "tg": "Тоҷикӣ", "ru": "Русӣ" }
+}
