@@ -1,8 +1,6 @@
 package services
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -32,50 +30,48 @@ func NewUploadService(dir, publicBase string, maxMB int64) (*UploadService, erro
 }
 
 var allowedExt = map[string]bool{
-	".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true, ".svg": true, ".ico": true,
+	".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true,
+	".svg": true, ".ico": true, ".mp4": true, ".webm": true, ".mov": true,
 }
 
-// SaveFile validates and stores an uploaded file. Returns the public URL.
-func (s *UploadService) SaveFile(file *multipart.FileHeader, subdir string) (string, error) {
+// SaveFile validates and stores an uploaded file. Returns the public URL + size.
+func (s *UploadService) SaveFile(file *multipart.FileHeader, subdir string) (string, int64, string, error) {
 	if file.Size <= 0 {
-		return "", errors.New("empty file")
+		return "", 0, "", errors.New("empty file")
 	}
 	if file.Size > s.maxBytes {
-		return "", fmt.Errorf("file too large (max %d MB)", s.maxBytes/(1024*1024))
+		return "", 0, "", fmt.Errorf("file too large (max %d MB)", s.maxBytes/(1024*1024))
 	}
 	ext := strings.ToLower(path.Ext(file.Filename))
 	if !allowedExt[ext] {
-		return "", errors.New("unsupported file type")
+		return "", 0, "", errors.New("unsupported file type")
 	}
 	subdir = sanitizeSubdir(subdir)
-
 	dst := filepath.Join(s.dir, subdir)
 	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return "", err
+		return "", 0, "", err
 	}
 	name, err := uniqueName(ext)
 	if err != nil {
-		return "", err
+		return "", 0, "", err
 	}
 	full := filepath.Join(dst, name)
 
 	src, err := file.Open()
 	if err != nil {
-		return "", err
+		return "", 0, "", err
 	}
 	defer src.Close()
 	out, err := os.Create(full)
 	if err != nil {
-		return "", err
+		return "", 0, "", err
 	}
 	defer out.Close()
-
 	if _, err := io.Copy(out, src); err != nil {
-		return "", err
+		return "", 0, "", err
 	}
-
 	url := s.publicBase + "/" + path.Join(subdir, name)
-	return url, nil
+	return url, file.Size, file.Header.Get("Content-Type"), nil
 }
 
 func sanitizeSubdir(s string) string {
@@ -88,9 +84,9 @@ func sanitizeSubdir(s string) string {
 }
 
 func uniqueName(ext string) (string, error) {
-	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
+	h, err := randomHex(8)
+	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), hex.EncodeToString(b), ext), nil
+	return fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), h, ext), nil
 }

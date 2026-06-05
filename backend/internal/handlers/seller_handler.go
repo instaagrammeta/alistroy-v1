@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/httpx"
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/middleware"
@@ -10,36 +11,31 @@ import (
 
 type SellerHandler struct {
 	sellers  *services.SellerService
-	products *services.ProductService
 	tracking *services.TrackingService
 }
 
-func NewSellerHandler(s *services.SellerService, p *services.ProductService, t *services.TrackingService) *SellerHandler {
-	return &SellerHandler{sellers: s, products: p, tracking: t}
+func NewSellerHandler(s *services.SellerService, t *services.TrackingService) *SellerHandler {
+	return &SellerHandler{sellers: s, tracking: t}
 }
 
-// Public ---
+// ---- Public ----
 
 func (h *SellerHandler) List(c *gin.Context) {
 	page, size := paginate(c)
-	feat := boolQuery(c, "featured")
+	active := true
 	items, total, err := h.sellers.List(c.Request.Context(), services.ListSellersInput{
-		Search:   c.Query("q"),
-		Status:   "approved",
-		Featured: feat,
-		Page:     page,
-		PageSize: size,
+		Search: c.Query("q"), Active: &active, Featured: boolQuery(c, "featured"),
+		Page: page, Size: size,
 	})
 	if err != nil {
 		mapServiceError(c, err)
 		return
 	}
-	httpx.List(c, items, newPagination(page, size, total))
+	httpx.List(c, items, httpx.NewPagination(page, size, total))
 }
 
 func (h *SellerHandler) Top(c *gin.Context) {
-	limit := intQuery(c, "limit", 6)
-	items, err := h.sellers.Top(c.Request.Context(), limit)
+	items, err := h.sellers.Top(c.Request.Context(), intQuery(c, "limit", 6))
 	if err != nil {
 		mapServiceError(c, err)
 		return
@@ -48,8 +44,7 @@ func (h *SellerHandler) Top(c *gin.Context) {
 }
 
 func (h *SellerHandler) GetBySlug(c *gin.Context) {
-	slug := c.Param("slug")
-	s, err := h.sellers.GetBySlug(c.Request.Context(), slug)
+	s, err := h.sellers.GetBySlug(c.Request.Context(), c.Param("slug"))
 	if err != nil {
 		mapServiceError(c, err)
 		return
@@ -57,7 +52,7 @@ func (h *SellerHandler) GetBySlug(c *gin.Context) {
 	httpx.OK(c, s)
 }
 
-// Authenticated seller ---
+// ---- Seller self ----
 
 func (h *SellerHandler) Me(c *gin.Context) {
 	s, err := h.sellers.GetByUserID(c.Request.Context(), middleware.MustUserID(c))
@@ -74,15 +69,11 @@ func (h *SellerHandler) UpdateMe(c *gin.Context) {
 		httpx.BadRequest(c, err.Error())
 		return
 	}
-	s, err := h.sellers.UpdateOwn(c.Request.Context(), middleware.MustUserID(c), services.SellerProfileInput{
-		Name:          req.Name,
-		DescriptionTJ: req.DescriptionTJ,
-		DescriptionRU: req.DescriptionRU,
-		LogoURL:       req.LogoURL,
-		Phone:         req.Phone,
-		WhatsApp:      req.WhatsApp,
-		Address:       req.Address,
-		City:          req.City,
+	s, err := h.sellers.UpdateOwn(c.Request.Context(), middleware.MustUserID(c), services.SellerInput{
+		FullName: req.FullName, CompanyName: req.CompanyName, MarketName: req.MarketName,
+		Phone: req.Phone, PhoneAlt: req.PhoneAlt, WhatsApp: req.WhatsApp,
+		Telegram: req.Telegram, TelegramUsername: req.TelegramUsername,
+		Address: req.Address, City: req.City, Notes: req.Notes, LogoURL: req.LogoURL,
 	})
 	if err != nil {
 		mapServiceError(c, err)
@@ -105,21 +96,19 @@ func (h *SellerHandler) MyStats(c *gin.Context) {
 	httpx.OK(c, totals)
 }
 
-// Admin ---
+// ---- Admin ----
 
 func (h *SellerHandler) AdminList(c *gin.Context) {
 	page, size := paginate(c)
 	items, total, err := h.sellers.List(c.Request.Context(), services.ListSellersInput{
-		Search:   c.Query("q"),
-		Status:   c.Query("status"),
-		Page:     page,
-		PageSize: size,
+		Search: c.Query("q"), Active: boolQuery(c, "active"), Featured: boolQuery(c, "featured"),
+		Page: page, Size: size,
 	})
 	if err != nil {
 		mapServiceError(c, err)
 		return
 	}
-	httpx.List(c, items, newPagination(page, size, total))
+	httpx.List(c, items, httpx.NewPagination(page, size, total))
 }
 
 func (h *SellerHandler) AdminGet(c *gin.Context) {
@@ -135,26 +124,31 @@ func (h *SellerHandler) AdminGet(c *gin.Context) {
 	httpx.OK(c, s)
 }
 
+func (h *SellerHandler) AdminCreate(c *gin.Context) {
+	var req sellerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+	s, err := h.sellers.CreateByAdmin(c.Request.Context(), toSellerInput(req))
+	if err != nil {
+		mapServiceError(c, err)
+		return
+	}
+	httpx.Created(c, s)
+}
+
 func (h *SellerHandler) AdminUpdate(c *gin.Context) {
 	id, ok := parseUUID(c, "id")
 	if !ok {
 		return
 	}
-	var req adminSellerRequest
+	var req sellerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.BadRequest(c, err.Error())
 		return
 	}
-	s, err := h.sellers.AdminUpdate(c.Request.Context(), id, services.SellerProfileInput{
-		Name:          req.Name,
-		DescriptionTJ: req.DescriptionTJ,
-		DescriptionRU: req.DescriptionRU,
-		LogoURL:       req.LogoURL,
-		Phone:         req.Phone,
-		WhatsApp:      req.WhatsApp,
-		Address:       req.Address,
-		City:          req.City,
-	}, req.Status, req.IsFeatured)
+	s, err := h.sellers.UpdateByAdmin(c.Request.Context(), id, toSellerInput(req))
 	if err != nil {
 		mapServiceError(c, err)
 		return
@@ -172,4 +166,20 @@ func (h *SellerHandler) AdminDelete(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, gin.H{"ok": true})
+}
+
+func toSellerInput(req sellerRequest) services.SellerInput {
+	in := services.SellerInput{
+		FullName: req.FullName, CompanyName: req.CompanyName, MarketName: req.MarketName,
+		Phone: req.Phone, PhoneAlt: req.PhoneAlt, WhatsApp: req.WhatsApp,
+		Telegram: req.Telegram, TelegramUsername: req.TelegramUsername,
+		Address: req.Address, City: req.City, Notes: req.Notes, LogoURL: req.LogoURL,
+		Login: req.Login, Password: req.Password, Active: req.Active, IsFeatured: req.IsFeatured,
+	}
+	if req.BusinessCategory != "" {
+		if id, err := uuid.Parse(req.BusinessCategory); err == nil {
+			in.BusinessCategory = &id
+		}
+	}
+	return in
 }

@@ -5,15 +5,17 @@ import (
 
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/httpx"
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/middleware"
+	"github.com/instaagrammeta/alistroy-v1/backend/internal/oauth"
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/services"
 )
 
 type AuthHandler struct {
-	auth *services.AuthService
+	auth   *services.AuthService
+	google *oauth.Google
 }
 
-func NewAuthHandler(auth *services.AuthService) *AuthHandler {
-	return &AuthHandler{auth: auth}
+func NewAuthHandler(a *services.AuthService, g *oauth.Google) *AuthHandler {
+	return &AuthHandler{auth: a, google: g}
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -22,15 +24,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		httpx.BadRequest(c, err.Error())
 		return
 	}
-	pair, err := h.auth.Register(c.Request.Context(), services.RegisterInput{
-		Email:      req.Email,
-		Password:   req.Password,
-		Name:       req.Name,
-		Phone:      req.Phone,
-		Role:       req.Role,
-		Locale:     req.Locale,
-		SellerName: req.SellerName,
-		City:       req.City,
+	pair, err := h.auth.RegisterCustomer(c.Request.Context(), services.RegisterCustomerInput{
+		Name: req.Name, Phone: req.Phone, Email: req.Email, Password: req.Password,
+		Address: req.Address, City: req.City, Locale: req.Locale,
 	})
 	if err != nil {
 		mapServiceError(c, err)
@@ -45,7 +41,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		httpx.BadRequest(c, err.Error())
 		return
 	}
-	pair, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
+	pair, err := h.auth.Login(c.Request.Context(), req.Identifier, req.Password)
 	if err != nil {
 		mapServiceError(c, err)
 		return
@@ -83,9 +79,8 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 	u, err := h.auth.UpdateProfile(c.Request.Context(), middleware.MustUserID(c), services.UpdateProfileInput{
-		Name:   req.Name,
-		Phone:  req.Phone,
-		Locale: req.Locale,
+		Name: req.Name, Phone: req.Phone, Locale: req.Locale,
+		Address: req.Address, City: req.City, Company: req.Company,
 	})
 	if err != nil {
 		mapServiceError(c, err)
@@ -107,37 +102,43 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	httpx.OK(c, gin.H{"ok": true})
 }
 
-func (h *AuthHandler) Forgot(c *gin.Context) {
-	var req forgotPasswordRequest
+func (h *AuthHandler) Logout(c *gin.Context) {
+	httpx.OK(c, gin.H{"ok": true})
+}
+
+// ---- Google OAuth ----
+
+func (h *AuthHandler) GoogleURL(c *gin.Context) {
+	if !h.google.Enabled() {
+		httpx.BadRequest(c, "google oauth not configured")
+		return
+	}
+	state := c.DefaultQuery("state", "alistroy")
+	httpx.OK(c, gin.H{"url": h.google.AuthURL(state)})
+}
+
+func (h *AuthHandler) GoogleCallback(c *gin.Context) {
+	if !h.google.Enabled() {
+		httpx.BadRequest(c, "google oauth not configured")
+		return
+	}
+	var req googleCallbackRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.BadRequest(c, err.Error())
 		return
 	}
-	tok, err := h.auth.RequestPasswordReset(c.Request.Context(), req.Email)
+	profile, err := h.google.Exchange(c.Request.Context(), req.Code)
+	if err != nil {
+		httpx.Unauthorized(c, "google exchange failed")
+		return
+	}
+	pair, needsProfile, err := h.auth.GoogleUpsert(c.Request.Context(), profile.ID, profile.Email, profile.Name, profile.Picture)
 	if err != nil {
 		mapServiceError(c, err)
 		return
 	}
-	// Token is returned in dev/staging so admin can deliver it manually.
-	httpx.OK(c, gin.H{"reset_token": tok})
-}
-
-func (h *AuthHandler) Reset(c *gin.Context) {
-	var req resetPasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.BadRequest(c, err.Error())
-		return
-	}
-	if err := h.auth.ResetPassword(c.Request.Context(), req.Token, req.NewPassword); err != nil {
-		mapServiceError(c, err)
-		return
-	}
-	httpx.OK(c, gin.H{"ok": true})
-}
-
-func (h *AuthHandler) Logout(c *gin.Context) {
-	// Stateless JWT — nothing to invalidate server-side.
-	// Front-end should drop tokens. (Refresh token rotation/blacklisting can be
-	// added later via Redis if needed.)
-	httpx.OK(c, gin.H{"ok": true})
+	httpx.OK(c, gin.H{
+		"tokens":        pair,
+		"needs_profile": needsProfile, // true → frontend must collect phone + address
+	})
 }

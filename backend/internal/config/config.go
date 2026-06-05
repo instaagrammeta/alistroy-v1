@@ -10,7 +10,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config holds all runtime configuration loaded from the environment.
+// Config aggregates all runtime configuration sourced from environment vars.
 type Config struct {
 	Env       string
 	LogLevel  string
@@ -26,15 +26,11 @@ type Config struct {
 	Rate     RateConfig
 	Market   MarketplaceContacts
 	Admin    AdminBootstrap
+	Google   GoogleOAuthConfig
 }
 
 type PostgresConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	DBName   string
-	SSLMode  string
+	Host, Port, User, Password, DBName, SSLMode string
 }
 
 func (p PostgresConfig) DSN() string {
@@ -45,14 +41,10 @@ func (p PostgresConfig) DSN() string {
 }
 
 type RedisConfig struct {
-	Host     string
-	Port     string
-	Password string
+	Host, Port, Password string
 }
 
-func (r RedisConfig) Addr() string {
-	return fmt.Sprintf("%s:%s", r.Host, r.Port)
-}
+func (r RedisConfig) Addr() string { return r.Host + ":" + r.Port }
 
 type JWTConfig struct {
 	Secret     string
@@ -76,96 +68,111 @@ type RateConfig struct {
 }
 
 type MarketplaceContacts struct {
-	Phone    string
-	WhatsApp string
+	Phone            string
+	WhatsApp         string
+	Telegram         string
+	TelegramUsername string
 }
 
 type AdminBootstrap struct {
 	Email    string
+	Phone    string
 	Password string
 	Name     string
 }
 
-// Load reads configuration from environment variables (and a .env file if present).
+type GoogleOAuthConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+}
+
+func (g GoogleOAuthConfig) Enabled() bool {
+	return g.ClientID != "" && g.ClientSecret != "" && g.RedirectURL != ""
+}
+
+// Load parses configuration from env (and optionally a local .env file).
 func Load() (*Config, error) {
-	_ = godotenv.Load() // ignore error if .env is missing
+	_ = godotenv.Load()
 
 	cfg := &Config{
-		Env:       getEnv("API_ENV", "development"),
-		LogLevel:  getEnv("API_LOG_LEVEL", "info"),
-		Host:      getEnv("API_HOST", "0.0.0.0"),
-		Port:      getEnv("API_PORT", "8080"),
-		PublicURL: getEnv("PUBLIC_URL", "http://localhost:3000"),
+		Env:       getStr("API_ENV", "development"),
+		LogLevel:  getStr("API_LOG_LEVEL", "info"),
+		Host:      getStr("API_HOST", "0.0.0.0"),
+		Port:      getStr("API_PORT", "8080"),
+		PublicURL: getStr("PUBLIC_URL", "http://localhost:3000"),
 		Postgres: PostgresConfig{
-			Host:     getEnv("POSTGRES_HOST", "localhost"),
-			Port:     getEnv("POSTGRES_PORT", "5432"),
-			User:     getEnv("POSTGRES_USER", "alistroy"),
-			Password: getEnv("POSTGRES_PASSWORD", "alistroy"),
-			DBName:   getEnv("POSTGRES_DB", "alistroy"),
-			SSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
+			Host:     getStr("POSTGRES_HOST", "localhost"),
+			Port:     getStr("POSTGRES_PORT", "5432"),
+			User:     getStr("POSTGRES_USER", "alistroy"),
+			Password: getStr("POSTGRES_PASSWORD", "alistroy"),
+			DBName:   getStr("POSTGRES_DB", "alistroy"),
+			SSLMode:  getStr("POSTGRES_SSLMODE", "disable"),
 		},
 		Redis: RedisConfig{
-			Host:     getEnv("REDIS_HOST", "localhost"),
-			Port:     getEnv("REDIS_PORT", "6379"),
-			Password: getEnv("REDIS_PASSWORD", ""),
+			Host:     getStr("REDIS_HOST", "localhost"),
+			Port:     getStr("REDIS_PORT", "6379"),
+			Password: getStr("REDIS_PASSWORD", ""),
 		},
 		JWT: JWTConfig{
-			Secret:     getEnv("JWT_SECRET", ""),
-			AccessTTL:  time.Duration(getEnvInt("JWT_ACCESS_TTL_MINUTES", 60)) * time.Minute,
-			RefreshTTL: time.Duration(getEnvInt("JWT_REFRESH_TTL_HOURS", 720)) * time.Hour,
+			Secret:     getStr("JWT_SECRET", ""),
+			AccessTTL:  time.Duration(getInt("JWT_ACCESS_TTL_MINUTES", 120)) * time.Minute,
+			RefreshTTL: time.Duration(getInt("JWT_REFRESH_TTL_HOURS", 720)) * time.Hour,
 		},
 		Upload: UploadConfig{
-			Dir:        getEnv("UPLOAD_DIR", "./uploads"),
-			MaxSizeMB:  int64(getEnvInt("UPLOAD_MAX_SIZE_MB", 10)),
-			PublicBase: getEnv("UPLOAD_PUBLIC_BASE", "/uploads"),
+			Dir:        getStr("UPLOAD_DIR", "./uploads"),
+			MaxSizeMB:  int64(getInt("UPLOAD_MAX_SIZE_MB", 50)),
+			PublicBase: getStr("UPLOAD_PUBLIC_BASE", "/uploads"),
 		},
-		CORS: CORSConfig{
-			AllowedOrigins: splitAndTrim(getEnv("CORS_ALLOWED_ORIGINS", "*")),
-		},
+		CORS: CORSConfig{AllowedOrigins: splitTrim(getStr("CORS_ALLOWED_ORIGINS", "*"))},
 		Rate: RateConfig{
-			RPS:   getEnvInt("RATE_LIMIT_RPS", 20),
-			Burst: getEnvInt("RATE_LIMIT_BURST", 40),
+			RPS:   getInt("RATE_LIMIT_RPS", 30),
+			Burst: getInt("RATE_LIMIT_BURST", 60),
 		},
 		Market: MarketplaceContacts{
-			Phone:    getEnv("MARKETPLACE_PHONE", ""),
-			WhatsApp: getEnv("MARKETPLACE_WHATSAPP", ""),
+			Phone:            getStr("MARKETPLACE_PHONE", ""),
+			WhatsApp:         getStr("MARKETPLACE_WHATSAPP", ""),
+			Telegram:         getStr("MARKETPLACE_TELEGRAM", ""),
+			TelegramUsername: getStr("MARKETPLACE_TELEGRAM_USERNAME", ""),
 		},
 		Admin: AdminBootstrap{
-			Email:    getEnv("ADMIN_EMAIL", ""),
-			Password: getEnv("ADMIN_PASSWORD", ""),
-			Name:     getEnv("ADMIN_NAME", "Admin"),
+			Email:    getStr("ADMIN_EMAIL", ""),
+			Phone:    getStr("ADMIN_PHONE", ""),
+			Password: getStr("ADMIN_PASSWORD", ""),
+			Name:     getStr("ADMIN_NAME", "Admin"),
+		},
+		Google: GoogleOAuthConfig{
+			ClientID:     getStr("GOOGLE_OAUTH_CLIENT_ID", ""),
+			ClientSecret: getStr("GOOGLE_OAUTH_CLIENT_SECRET", ""),
+			RedirectURL:  getStr("GOOGLE_OAUTH_REDIRECT_URL", ""),
 		},
 	}
 
-	if cfg.JWT.Secret == "" || len(cfg.JWT.Secret) < 16 {
-		return nil, fmt.Errorf("JWT_SECRET must be set and at least 16 characters long")
+	if len(cfg.JWT.Secret) < 16 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 16 characters")
 	}
-
 	return cfg, nil
 }
 
-func getEnv(key, fallback string) string {
+func getStr(key, def string) string {
 	if v, ok := os.LookupEnv(key); ok && v != "" {
 		return v
 	}
-	return fallback
+	return def
 }
-
-func getEnvInt(key string, fallback int) int {
+func getInt(key string, def int) int {
 	if v, ok := os.LookupEnv(key); ok {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
 		}
 	}
-	return fallback
+	return def
 }
-
-func splitAndTrim(s string) []string {
+func splitTrim(s string) []string {
 	parts := strings.Split(s, ",")
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
+		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}
 	}

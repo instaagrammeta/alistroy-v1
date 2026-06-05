@@ -14,7 +14,6 @@ type ReviewHandler struct {
 
 func NewReviewHandler(s *services.ReviewService) *ReviewHandler { return &ReviewHandler{svc: s} }
 
-// Public list of approved reviews for a product
 func (h *ReviewHandler) ListForProduct(c *gin.Context) {
 	id, ok := parseUUID(c, "id")
 	if !ok {
@@ -26,10 +25,9 @@ func (h *ReviewHandler) ListForProduct(c *gin.Context) {
 		mapServiceError(c, err)
 		return
 	}
-	httpx.List(c, items, newPagination(page, size, total))
+	httpx.List(c, items, httpx.NewPagination(page, size, total))
 }
 
-// Authenticated user creates a review on a product
 func (h *ReviewHandler) Create(c *gin.Context) {
 	id, ok := parseUUID(c, "id")
 	if !ok {
@@ -41,9 +39,7 @@ func (h *ReviewHandler) Create(c *gin.Context) {
 		return
 	}
 	r, err := h.svc.Create(c.Request.Context(), middleware.MustUserID(c), services.ReviewInput{
-		ProductID: id,
-		Rating:    req.Rating,
-		Comment:   req.Comment,
+		ProductID: id, Rating: req.Rating, Comment: req.Comment,
 	})
 	if err != nil {
 		mapServiceError(c, err)
@@ -52,19 +48,16 @@ func (h *ReviewHandler) Create(c *gin.Context) {
 	httpx.Created(c, r)
 }
 
-// Admin
 func (h *ReviewHandler) AdminList(c *gin.Context) {
 	page, size := paginate(c)
-	status := c.Query("status")
-	items, total, err := h.svc.AdminList(c.Request.Context(), status, page, size)
+	items, total, err := h.svc.AdminList(c.Request.Context(), c.Query("status"), page, size)
 	if err != nil {
 		mapServiceError(c, err)
 		return
 	}
-	httpx.List(c, items, newPagination(page, size, total))
+	httpx.List(c, items, httpx.NewPagination(page, size, total))
 }
 
-// Admin
 func (h *ReviewHandler) AdminModerate(c *gin.Context) {
 	id, ok := parseUUID(c, "id")
 	if !ok {
@@ -83,7 +76,6 @@ func (h *ReviewHandler) AdminModerate(c *gin.Context) {
 	httpx.OK(c, r)
 }
 
-// Admin
 func (h *ReviewHandler) AdminDelete(c *gin.Context) {
 	id, ok := parseUUID(c, "id")
 	if !ok {

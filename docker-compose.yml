@@ -53,6 +53,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE}
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -67,41 +68,18 @@ services:
       RATE_LIMIT_BURST: ${RATE_LIMIT_BURST}
       MARKETPLACE_PHONE: ${MARKETPLACE_PHONE}
       MARKETPLACE_WHATSAPP: ${MARKETPLACE_WHATSAPP}
+      MARKETPLACE_TELEGRAM: ${MARKETPLACE_TELEGRAM}
+      MARKETPLACE_TELEGRAM_USERNAME: ${MARKETPLACE_TELEGRAM_USERNAME}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PHONE: ${ADMIN_PHONE}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_NAME: ${ADMIN_NAME}
       PUBLIC_URL: ${PUBLIC_URL}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
+      GOOGLE_OAUTH_REDIRECT_URL: ${GOOGLE_OAUTH_REDIRECT_URL}
     volumes:
       - uploads:/app/uploads
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 20s
-    networks:
-      - alistroy-net
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE}
-        NUXT_PUBLIC_SITE_URL: ${NUXT_PUBLIC_SITE_URL}
-        NUXT_PUBLIC_UPLOADS_BASE: ${NUXT_PUBLIC_UPLOADS_BASE}
-        NUXT_PUBLIC_DEFAULT_LOCALE: ${NUXT_PUBLIC_DEFAULT_LOCALE}
-    container_name: alistroy-frontend
-    restart: unless-stopped
-    depends_on:
-      - backend
-    environment:
-      NUXT_PORT: ${NUXT_PORT}
-      NUXT_HOST: ${NUXT_HOST}
-      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE}
-      NUXT_PUBLIC_SITE_URL: ${NUXT_PUBLIC_SITE_URL}
-      NUXT_PUBLIC_UPLOADS_BASE: ${NUXT_PUBLIC_UPLOADS_BASE}
-      NUXT_PUBLIC_DEFAULT_LOCALE: ${NUXT_PUBLIC_DEFAULT_LOCALE}
     networks:
       - alistroy-net
 
@@ -112,10 +90,8 @@ services:
     depends_on:
       backend:
         condition: service_started
-      frontend:
-        condition: service_started
     ports:
-      - "${NGINX_HTTP_PORT}:80"
+      - "${NGINX_HTTP_PORT:-80}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro

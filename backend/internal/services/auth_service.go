@@ -14,25 +14,13 @@ import (
 )
 
 type AuthService struct {
-	users   *repositories.UserRepository
-	sellers *repositories.SellerRepository
-	jwt     *jwt.Manager
+	users     *repositories.UserRepository
+	customers *repositories.CustomerRepository
+	jwt       *jwt.Manager
 }
 
-func NewAuthService(users *repositories.UserRepository, sellers *repositories.SellerRepository, jm *jwt.Manager) *AuthService {
-	return &AuthService{users: users, sellers: sellers, jwt: jm}
-}
-
-type RegisterInput struct {
-	Email    string
-	Password string
-	Name     string
-	Phone    string
-	Role     string // "customer" (default) or "seller"
-	Locale   string
-	// Used only when Role == "seller":
-	SellerName string
-	City       string
+func NewAuthService(u *repositories.UserRepository, c *repositories.CustomerRepository, jm *jwt.Manager) *AuthService {
+	return &AuthService{users: u, customers: c, jwt: jm}
 }
 
 type TokenPair struct {
@@ -43,91 +31,128 @@ type TokenPair struct {
 	User             *models.User `json:"user"`
 }
 
-func (s *AuthService) Register(ctx context.Context, in RegisterInput) (*TokenPair, error) {
-	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
-	if in.Email == "" || in.Password == "" || in.Name == "" {
-		return nil, ErrValidation
-	}
-	if in.Role == "" {
-		in.Role = models.RoleCustomer
-	}
-	if in.Role != models.RoleCustomer && in.Role != models.RoleSeller {
-		return nil, ErrValidation
-	}
-	if in.Locale == "" {
-		in.Locale = "tg"
-	}
+// RegisterCustomerInput — phone + password registration (email optional).
+type RegisterCustomerInput struct {
+	Name     string
+	Phone    string
+	Email    string
+	Password string
+	Address  string
+	City     string
+	Locale   string
+}
 
-	exists, err := s.users.ExistsByEmail(ctx, in.Email)
-	if err != nil {
-		return nil, err
+func (s *AuthService) RegisterCustomer(ctx context.Context, in RegisterCustomerInput) (*TokenPair, error) {
+	in.Phone = strings.TrimSpace(in.Phone)
+	if in.Name == "" || in.Phone == "" || in.Password == "" {
+		return nil, ErrValidation
 	}
-	if exists {
+	if exists, _ := s.users.ExistsByPhone(ctx, in.Phone); exists {
 		return nil, ErrConflict
 	}
-
+	if in.Email != "" {
+		if exists, _ := s.users.ExistsByEmail(ctx, in.Email); exists {
+			return nil, ErrConflict
+		}
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
 	user := &models.User{
-		Email:        in.Email,
-		PasswordHash: string(hash),
 		Name:         in.Name,
 		Phone:        in.Phone,
-		Role:         in.Role,
-		Locale:       in.Locale,
-		IsActive:     true,
+		Email:        strings.ToLower(strings.TrimSpace(in.Email)),
+		PasswordHash: string(hash),
+		Role:         models.RoleCustomer,
+		Status:       models.UserStatusActive,
+		Locale:       defaultStr(in.Locale, "tg"),
 	}
 	if err := s.users.Create(ctx, user); err != nil {
 		return nil, err
 	}
-
-	if in.Role == models.RoleSeller {
-		seller, err := s.createSellerFor(ctx, user, in.SellerName, in.City)
-		if err != nil {
-			return nil, err
-		}
-		user.Seller = seller
+	cust := &models.Customer{UserID: user.ID, Address: in.Address, City: in.City}
+	if err := s.customers.Create(ctx, cust); err != nil {
+		return nil, err
 	}
-
-	return s.issueTokens(user)
+	user.Customer = cust
+	return s.issue(user)
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (*TokenPair, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
-	user, err := s.users.FindByEmail(ctx, email)
+// LoginInput accepts phone / email / login + password.
+func (s *AuthService) Login(ctx context.Context, identifier, password string) (*TokenPair, error) {
+	user, err := s.users.FindByIdentifier(ctx, identifier)
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
-	if !user.IsActive {
+	if user.Status != models.UserStatusActive {
 		return nil, ErrForbidden
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	if user.PasswordHash == "" ||
+		bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 		return nil, ErrInvalidCredentials
 	}
 	now := time.Now().UTC()
 	user.LastLoginAt = &now
-	_ = s.users.Update(ctx, user)
-	return s.issueTokens(user)
+	_ = s.users.Save(ctx, user)
+	return s.issue(user)
 }
 
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*TokenPair, error) {
 	claims, err := s.jwt.Parse(refreshToken)
-	if err != nil {
-		return nil, ErrUnauthorized
-	}
-	if claims.Type != jwt.RefreshToken {
+	if err != nil || claims.Type != jwt.RefreshToken {
 		return nil, ErrUnauthorized
 	}
 	user, err := s.users.FindByID(ctx, claims.UserID)
 	if err != nil {
 		return nil, ErrUnauthorized
 	}
-	if !user.IsActive {
+	if user.Status != models.UserStatusActive {
 		return nil, ErrForbidden
 	}
-	return s.issueTokens(user)
+	return s.issue(user)
+}
+
+// GoogleUpsert finds or creates a customer from a verified Google profile.
+// New Google users still must complete phone+address (enforced by handler).
+func (s *AuthService) GoogleUpsert(ctx context.Context, googleID, email, name, avatar string) (*TokenPair, bool, error) {
+	if googleID == "" {
+		return nil, false, ErrValidation
+	}
+	if u, err := s.users.FindByGoogleID(ctx, googleID); err == nil {
+		pair, err := s.issue(u)
+		return pair, false, err
+	}
+	if email != "" {
+		if u, err := s.users.FindByEmail(ctx, email); err == nil {
+			u.GoogleID = googleID
+			if u.AvatarURL == "" {
+				u.AvatarURL = avatar
+			}
+			_ = s.users.Save(ctx, u)
+			pair, err := s.issue(u)
+			return pair, false, err
+		}
+	}
+	user := &models.User{
+		Name:      defaultStr(name, "Customer"),
+		Email:     strings.ToLower(strings.TrimSpace(email)),
+		GoogleID:  googleID,
+		AvatarURL: avatar,
+		Role:      models.RoleCustomer,
+		Status:    models.UserStatusActive,
+		Locale:    "tg",
+	}
+	if err := s.users.Create(ctx, user); err != nil {
+		return nil, false, err
+	}
+	cust := &models.Customer{UserID: user.ID}
+	if err := s.customers.Create(ctx, cust); err != nil {
+		return nil, false, err
+	}
+	user.Customer = cust
+	pair, err := s.issue(user)
+	return pair, true, err // needsProfile = true
 }
 
 func (s *AuthService) Me(ctx context.Context, id uuid.UUID) (*models.User, error) {
@@ -142,9 +167,12 @@ func (s *AuthService) Me(ctx context.Context, id uuid.UUID) (*models.User, error
 }
 
 type UpdateProfileInput struct {
-	Name   string
-	Phone  string
-	Locale string
+	Name    string
+	Phone   string
+	Locale  string
+	Address string
+	City    string
+	Company string
 }
 
 func (s *AuthService) UpdateProfile(ctx context.Context, id uuid.UUID, in UpdateProfileInput) (*models.User, error) {
@@ -155,80 +183,59 @@ func (s *AuthService) UpdateProfile(ctx context.Context, id uuid.UUID, in Update
 	if in.Name != "" {
 		u.Name = in.Name
 	}
-	if in.Phone != "" {
+	if in.Phone != "" && in.Phone != u.Phone {
+		if exists, _ := s.users.ExistsByPhone(ctx, in.Phone); exists {
+			return nil, ErrConflict
+		}
 		u.Phone = in.Phone
 	}
 	if in.Locale != "" {
 		u.Locale = in.Locale
 	}
-	if err := s.users.Update(ctx, u); err != nil {
+	if err := s.users.Save(ctx, u); err != nil {
 		return nil, err
+	}
+	// Update customer profile if present.
+	if u.Role == models.RoleCustomer {
+		if cust, err := s.customers.FindByUserID(ctx, u.ID); err == nil {
+			if in.Address != "" {
+				cust.Address = in.Address
+			}
+			if in.City != "" {
+				cust.City = in.City
+			}
+			if in.Company != "" {
+				cust.Company = in.Company
+			}
+			_ = s.customers.Save(ctx, cust)
+			u.Customer = cust
+		}
 	}
 	return u, nil
 }
 
-func (s *AuthService) ChangePassword(ctx context.Context, id uuid.UUID, oldPassword, newPassword string) error {
-	if newPassword == "" || len(newPassword) < 8 {
+func (s *AuthService) ChangePassword(ctx context.Context, id uuid.UUID, oldPw, newPw string) error {
+	if len(newPw) < 8 {
 		return ErrValidation
 	}
 	u, err := s.users.FindByID(ctx, id)
 	if err != nil {
 		return ErrNotFound
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(oldPassword)); err != nil {
-		return ErrInvalidCredentials
+	if u.PasswordHash != "" {
+		if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(oldPw)) != nil {
+			return ErrInvalidCredentials
+		}
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPw), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 	u.PasswordHash = string(hash)
-	return s.users.Update(ctx, u)
+	return s.users.Save(ctx, u)
 }
 
-// RequestPasswordReset issues a one-time reset token. The token is returned
-// here so it can be surfaced to the integrator (email/SMS gateway) — in this
-// build we expose it via the API response (admin can also use it manually).
-func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) (string, error) {
-	u, err := s.users.FindByEmail(ctx, email)
-	if err != nil {
-		// Do not leak existence; return empty token.
-		return "", nil
-	}
-	tok, err := RandomToken(24)
-	if err != nil {
-		return "", err
-	}
-	exp := time.Now().UTC().Add(2 * time.Hour)
-	u.ResetToken = tok
-	u.ResetExpiresAt = &exp
-	if err := s.users.Update(ctx, u); err != nil {
-		return "", err
-	}
-	return tok, nil
-}
-
-func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
-	if len(newPassword) < 8 {
-		return ErrValidation
-	}
-	u, err := s.users.FindByResetToken(ctx, token)
-	if err != nil || u.ResetExpiresAt == nil || time.Now().UTC().After(*u.ResetExpiresAt) {
-		return ErrUnauthorized
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	u.PasswordHash = string(hash)
-	u.ResetToken = ""
-	u.ResetExpiresAt = nil
-	return s.users.Update(ctx, u)
-}
-
-// ----- helpers -----
-
-func (s *AuthService) issueTokens(u *models.User) (*TokenPair, error) {
+func (s *AuthService) issue(u *models.User) (*TokenPair, error) {
 	at, atExp, err := s.jwt.Generate(u.ID, u.Role, jwt.AccessToken)
 	if err != nil {
 		return nil, err
@@ -244,49 +251,4 @@ func (s *AuthService) issueTokens(u *models.User) (*TokenPair, error) {
 		RefreshExpiresAt: rtExp,
 		User:             u,
 	}, nil
-}
-
-func (s *AuthService) createSellerFor(ctx context.Context, user *models.User, sellerName, city string) (*models.Seller, error) {
-	name := strings.TrimSpace(sellerName)
-	if name == "" {
-		name = user.Name
-	}
-	slug := Slugify(name)
-	finalSlug := slug
-	for i := 1; i < 1000; i++ {
-		exists, err := s.sellers.ExistsBySlug(ctx, finalSlug)
-		if err != nil {
-			return nil, err
-		}
-		if !exists {
-			break
-		}
-		finalSlug = slug + "-" + intToStr(i)
-	}
-	seller := &models.Seller{
-		UserID:   user.ID,
-		Name:     name,
-		Slug:     finalSlug,
-		Phone:    user.Phone,
-		WhatsApp: user.Phone,
-		City:     city,
-		Status:   models.SellerStatusPending,
-	}
-	if err := s.sellers.Create(ctx, seller); err != nil {
-		return nil, err
-	}
-	return seller, nil
-}
-
-func intToStr(n int) string {
-	const digits = "0123456789"
-	if n == 0 {
-		return "0"
-	}
-	out := make([]byte, 0, 10)
-	for n > 0 {
-		out = append([]byte{digits[n%10]}, out...)
-		n /= 10
-	}
-	return string(out)
 }

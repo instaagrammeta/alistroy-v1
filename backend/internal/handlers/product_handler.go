@@ -10,51 +10,52 @@ import (
 )
 
 type ProductHandler struct {
-	products  *services.ProductService
-	sellers   *services.SellerService
-	favorites *services.FavoriteService
-	reviews   *services.ReviewService
+	products *services.ProductService
+	sellers  *services.SellerService
+	reviews  *services.ReviewService
 }
 
-func NewProductHandler(p *services.ProductService, s *services.SellerService, f *services.FavoriteService, r *services.ReviewService) *ProductHandler {
-	return &ProductHandler{products: p, sellers: s, favorites: f, reviews: r}
+func NewProductHandler(p *services.ProductService, s *services.SellerService, r *services.ReviewService) *ProductHandler {
+	return &ProductHandler{products: p, sellers: s, reviews: r}
 }
 
-// ----- Public -----
+// ---- Public ----
 
 func (h *ProductHandler) List(c *gin.Context) {
 	page, size := paginate(c)
-	items, total, err := h.products.ListPublic(c.Request.Context(), services.ListProductsInput{
+	var brandIDs []uuid.UUID
+	for _, raw := range c.QueryArray("brand") {
+		if id, err := uuid.Parse(raw); err == nil {
+			brandIDs = append(brandIDs, id)
+		}
+	}
+	items, total, err := h.products.ListPublic(c.Request.Context(), services.ListInput{
 		Search:       c.Query("q"),
 		CategorySlug: c.Query("category"),
+		SubcatSlug:   c.Query("subcategory"),
 		SellerSlug:   c.Query("seller"),
+		BrandIDs:     brandIDs,
 		IsFeatured:   boolQuery(c, "featured"),
 		MinPrice:     float64Query(c, "min_price"),
 		MaxPrice:     float64Query(c, "max_price"),
 		Sort:         c.Query("sort"),
-		Page:         page,
-		PageSize:     size,
+		Page:         page, Size: size,
 	})
 	if err != nil {
 		mapServiceError(c, err)
 		return
 	}
-	httpx.List(c, items, newPagination(page, size, total))
+	httpx.List(c, items, httpx.NewPagination(page, size, total))
 }
 
 func (h *ProductHandler) GetBySlug(c *gin.Context) {
-	slug := c.Param("slug")
-	p, err := h.products.GetPublicBySlug(c.Request.Context(), slug)
+	p, err := h.products.GetPublicBySlug(c.Request.Context(), c.Param("slug"))
 	if err != nil {
 		mapServiceError(c, err)
 		return
 	}
 	avg, cnt, _ := h.reviews.Average(c.Request.Context(), p.ID)
-	httpx.OK(c, gin.H{
-		"product":      p,
-		"avg_rating":   avg,
-		"review_count": cnt,
-	})
+	httpx.OK(c, gin.H{"product": p, "avg_rating": avg, "review_count": cnt})
 }
 
 func (h *ProductHandler) Related(c *gin.Context) {
@@ -62,8 +63,7 @@ func (h *ProductHandler) Related(c *gin.Context) {
 	if !ok {
 		return
 	}
-	limit := intQuery(c, "limit", 8)
-	items, err := h.products.Related(c.Request.Context(), id, limit)
+	items, err := h.products.Related(c.Request.Context(), id, intQuery(c, "limit", 8))
 	if err != nil {
 		mapServiceError(c, err)
 		return
@@ -71,7 +71,16 @@ func (h *ProductHandler) Related(c *gin.Context) {
 	httpx.OK(c, items)
 }
 
-// ----- Seller (auth: role=seller) -----
+func (h *ProductHandler) PriceBounds(c *gin.Context) {
+	min, max, err := h.products.PriceBounds(c.Request.Context(), c.Query("category"))
+	if err != nil {
+		mapServiceError(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"min": min, "max": max})
+}
+
+// ---- Seller ----
 
 func (h *ProductHandler) MyList(c *gin.Context) {
 	page, size := paginate(c)
@@ -80,18 +89,16 @@ func (h *ProductHandler) MyList(c *gin.Context) {
 		mapServiceError(c, err)
 		return
 	}
-	items, total, err := h.products.ListForSeller(c.Request.Context(), seller.ID, services.ListProductsInput{
-		Search:   c.Query("q"),
-		Status:   c.Query("status"),
-		Sort:     c.Query("sort"),
-		Page:     page,
-		PageSize: size,
+	items, total, err := h.products.ListForSeller(c.Request.Context(), seller.ID, services.ListInput{
+		Search: c.Query("q"), Status: c.Query("status"),
+		LowStockOnly: boolPtrTrue(boolQuery(c, "low_stock")),
+		Sort:         c.Query("sort"), Page: page, Size: size,
 	})
 	if err != nil {
 		mapServiceError(c, err)
 		return
 	}
-	httpx.List(c, items, newPagination(page, size, total))
+	httpx.List(c, items, httpx.NewPagination(page, size, total))
 }
 
 func (h *ProductHandler) MyCreate(c *gin.Context) {
@@ -105,21 +112,8 @@ func (h *ProductHandler) MyCreate(c *gin.Context) {
 		mapServiceError(c, err)
 		return
 	}
-	catID, _ := uuid.Parse(req.CategoryID)
-	p, err := h.products.CreateBySeller(c.Request.Context(), seller.ID, services.ProductInput{
-		CategoryID:    catID,
-		TitleTJ:       req.TitleTJ,
-		TitleRU:       req.TitleRU,
-		DescriptionTJ: req.DescriptionTJ,
-		DescriptionRU: req.DescriptionRU,
-		Price:         req.Price,
-		Currency:      req.Currency,
-		Unit:          req.Unit,
-		SKU:           req.SKU,
-		StockQuantity: req.StockQuantity,
-		IsAvailable:   req.IsAvailable,
-		Images:        toServiceImages(req.Images),
-	})
+	in := toProductInput(req)
+	p, err := h.products.CreateBySeller(c.Request.Context(), seller.ID, in)
 	if err != nil {
 		mapServiceError(c, err)
 		return
@@ -142,27 +136,7 @@ func (h *ProductHandler) MyUpdate(c *gin.Context) {
 		mapServiceError(c, err)
 		return
 	}
-	in := services.ProductInput{
-		TitleTJ:       req.TitleTJ,
-		TitleRU:       req.TitleRU,
-		DescriptionTJ: req.DescriptionTJ,
-		DescriptionRU: req.DescriptionRU,
-		Price:         req.Price,
-		Currency:      req.Currency,
-		Unit:          req.Unit,
-		SKU:           req.SKU,
-		StockQuantity: req.StockQuantity,
-		IsAvailable:   req.IsAvailable,
-	}
-	if req.CategoryID != "" {
-		if cid, err := uuid.Parse(req.CategoryID); err == nil {
-			in.CategoryID = cid
-		}
-	}
-	if req.Images != nil {
-		in.Images = toServiceImages(*req.Images)
-	}
-	p, err := h.products.UpdateBySeller(c.Request.Context(), seller.ID, id, in)
+	p, err := h.products.UpdateBySeller(c.Request.Context(), seller.ID, id, toProductUpdateInput(req))
 	if err != nil {
 		mapServiceError(c, err)
 		return
@@ -187,26 +161,23 @@ func (h *ProductHandler) MyDelete(c *gin.Context) {
 	httpx.OK(c, gin.H{"ok": true})
 }
 
-// ----- Admin -----
+// ---- Admin ----
 
 func (h *ProductHandler) AdminList(c *gin.Context) {
 	page, size := paginate(c)
-	items, total, err := h.products.ListAdmin(c.Request.Context(), services.ListProductsInput{
-		Search:       c.Query("q"),
-		Status:       c.Query("status"),
-		CategorySlug: c.Query("category"),
-		SellerSlug:   c.Query("seller"),
-		MinPrice:     float64Query(c, "min_price"),
-		MaxPrice:     float64Query(c, "max_price"),
-		Sort:         c.Query("sort"),
-		Page:         page,
-		PageSize:     size,
+	items, total, err := h.products.ListAdmin(c.Request.Context(), services.ListInput{
+		Search: c.Query("q"), Status: c.Query("status"),
+		CategorySlug: c.Query("category"), SellerSlug: c.Query("seller"),
+		SellerID:     optionalUUIDQuery(c, "seller_id"),
+		LowStockOnly: boolPtrTrue(boolQuery(c, "low_stock")),
+		MinPrice:     float64Query(c, "min_price"), MaxPrice: float64Query(c, "max_price"),
+		Sort: c.Query("sort"), Page: page, Size: size,
 	})
 	if err != nil {
 		mapServiceError(c, err)
 		return
 	}
-	httpx.List(c, items, newPagination(page, size, total))
+	httpx.List(c, items, httpx.NewPagination(page, size, total))
 }
 
 func (h *ProductHandler) AdminGet(c *gin.Context) {
@@ -222,43 +193,37 @@ func (h *ProductHandler) AdminGet(c *gin.Context) {
 	httpx.OK(c, p)
 }
 
+func (h *ProductHandler) AdminCreate(c *gin.Context) {
+	var req productCreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+	in := toProductInput(req)
+	if req.SellerID != "" {
+		if sid, err := uuid.Parse(req.SellerID); err == nil {
+			in.SellerID = sid
+		}
+	}
+	p, err := h.products.CreateByAdmin(c.Request.Context(), in)
+	if err != nil {
+		mapServiceError(c, err)
+		return
+	}
+	httpx.Created(c, p)
+}
+
 func (h *ProductHandler) AdminUpdate(c *gin.Context) {
 	id, ok := parseUUID(c, "id")
 	if !ok {
 		return
 	}
-	var req adminProductUpdateRequest
+	var req productUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.BadRequest(c, err.Error())
 		return
 	}
-	in := services.ProductInput{
-		TitleTJ:        req.TitleTJ,
-		TitleRU:        req.TitleRU,
-		DescriptionTJ:  req.DescriptionTJ,
-		DescriptionRU:  req.DescriptionRU,
-		Price:          req.Price,
-		Currency:       req.Currency,
-		Unit:           req.Unit,
-		SKU:            req.SKU,
-		StockQuantity:  req.StockQuantity,
-		IsAvailable:    req.IsAvailable,
-		ContactType:    req.ContactType,
-		PhoneNumber:    req.PhoneNumber,
-		WhatsAppNumber: req.WhatsAppNumber,
-		IsFeatured:     req.IsFeatured,
-		Status:         req.Status,
-		RejectionNote:  req.RejectionNote,
-	}
-	if req.CategoryID != "" {
-		if cid, err := uuid.Parse(req.CategoryID); err == nil {
-			in.CategoryID = cid
-		}
-	}
-	if req.Images != nil {
-		in.Images = toServiceImages(*req.Images)
-	}
-	p, err := h.products.AdminUpdate(c.Request.Context(), id, in)
+	p, err := h.products.UpdateByAdmin(c.Request.Context(), id, toProductUpdateInput(req))
 	if err != nil {
 		mapServiceError(c, err)
 		return
@@ -277,11 +242,10 @@ func (h *ProductHandler) AdminModerate(c *gin.Context) {
 		return
 	}
 	p, err := h.products.Moderate(c.Request.Context(), id, services.ModerationDecision{
-		Status:         req.Status,
-		ContactType:    req.ContactType,
-		PhoneNumber:    req.PhoneNumber,
-		WhatsAppNumber: req.WhatsAppNumber,
-		RejectionNote:  req.RejectionNote,
+		Status: req.Status, SalePrice: req.SalePrice,
+		ContactOwner: req.ContactOwner, ContactPhone: req.ContactPhone,
+		ContactWhatsApp: req.ContactWhatsApp, ContactTelegram: req.ContactTelegram,
+		RejectionNote: req.RejectionNote, IsFeatured: req.IsFeatured,
 	})
 	if err != nil {
 		mapServiceError(c, err)
@@ -295,14 +259,83 @@ func (h *ProductHandler) AdminDelete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.products.AdminDelete(c.Request.Context(), id); err != nil {
+	if err := h.products.DeleteByAdmin(c.Request.Context(), id); err != nil {
 		mapServiceError(c, err)
 		return
 	}
 	httpx.OK(c, gin.H{"ok": true})
 }
 
-// helpers
+// ---- mapping helpers ----
+
+func toProductInput(req productCreateRequest) services.ProductInput {
+	in := services.ProductInput{
+		SKU: req.SKU, NameTJ: req.NameTJ, NameRU: req.NameRU,
+		DescriptionTJ: req.DescriptionTJ, DescriptionRU: req.DescriptionRU,
+		Unit: req.Unit, Currency: req.Currency,
+		CostPrice: req.CostPrice, SalePrice: req.SalePrice, DiscountPercent: req.DiscountPercent,
+		StockQuantity: req.StockQuantity, MinimumStock: req.MinimumStock,
+		IsAvailable: req.IsAvailable, IsFeatured: req.IsFeatured,
+		ContactOwner: req.ContactOwner, ContactPhone: req.ContactPhone,
+		ContactWhatsApp: req.ContactWhatsApp, ContactTelegram: req.ContactTelegram,
+		Status: req.Status,
+		Images: toServiceImages(req.Images),
+	}
+	if req.CategoryID != "" {
+		if id, err := uuid.Parse(req.CategoryID); err == nil {
+			in.CategoryID = id
+		}
+	}
+	if req.SubcategoryID != "" {
+		if id, err := uuid.Parse(req.SubcategoryID); err == nil {
+			in.SubcategoryID = &id
+		}
+	}
+	if req.BrandID != "" {
+		if id, err := uuid.Parse(req.BrandID); err == nil {
+			in.BrandID = &id
+		}
+	}
+	return in
+}
+
+func toProductUpdateInput(req productUpdateRequest) services.ProductInput {
+	in := services.ProductInput{
+		SKU: req.SKU, NameTJ: req.NameTJ, NameRU: req.NameRU,
+		DescriptionTJ: req.DescriptionTJ, DescriptionRU: req.DescriptionRU,
+		Unit: req.Unit, Currency: req.Currency,
+		CostPrice: req.CostPrice, SalePrice: req.SalePrice, DiscountPercent: req.DiscountPercent,
+		StockQuantity: req.StockQuantity, MinimumStock: req.MinimumStock,
+		IsAvailable: req.IsAvailable, IsFeatured: req.IsFeatured,
+		ContactOwner: req.ContactOwner, ContactPhone: req.ContactPhone,
+		ContactWhatsApp: req.ContactWhatsApp, ContactTelegram: req.ContactTelegram,
+		Status: req.Status,
+	}
+	if req.CategoryID != "" {
+		if id, err := uuid.Parse(req.CategoryID); err == nil {
+			in.CategoryID = id
+		}
+	}
+	if req.SubcategoryID != "" {
+		if id, err := uuid.Parse(req.SubcategoryID); err == nil {
+			in.SubcategoryID = &id
+		}
+	}
+	if req.BrandID != "" {
+		if id, err := uuid.Parse(req.BrandID); err == nil {
+			in.BrandID = &id
+		}
+	}
+	if req.SellerID != "" {
+		if id, err := uuid.Parse(req.SellerID); err == nil {
+			in.SellerID = id
+		}
+	}
+	if req.Images != nil {
+		in.Images = toServiceImages(*req.Images)
+	}
+	return in
+}
 
 func toServiceImages(in []productImageDTO) []services.ProductImageInput {
 	out := make([]services.ProductImageInput, 0, len(in))
@@ -311,3 +344,5 @@ func toServiceImages(in []productImageDTO) []services.ProductImageInput {
 	}
 	return out
 }
+
+func boolPtrTrue(p *bool) bool { return p != nil && *p }

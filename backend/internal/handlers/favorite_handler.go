@@ -23,7 +23,7 @@ func (h *FavoriteHandler) List(c *gin.Context) {
 		mapServiceError(c, err)
 		return
 	}
-	httpx.List(c, items, newPagination(page, size, total))
+	httpx.List(c, items, httpx.NewPagination(page, size, total))
 }
 
 func (h *FavoriteHandler) Add(c *gin.Context) {

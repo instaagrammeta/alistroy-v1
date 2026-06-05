@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,87 +13,125 @@ import (
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/database"
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/handlers"
 	appjwt "github.com/instaagrammeta/alistroy-v1/backend/internal/jwt"
+	"github.com/instaagrammeta/alistroy-v1/backend/internal/logger"
+	"github.com/instaagrammeta/alistroy-v1/backend/internal/oauth"
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/repositories"
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/seed"
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/server"
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/services"
+	"github.com/instaagrammeta/alistroy-v1/backend/internal/ws"
 	"github.com/instaagrammeta/alistroy-v1/backend/migrations"
 )
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		logger.Error("config", "err", err)
+		os.Exit(1)
 	}
+	logger.SetDefault(logger.New(os.Stdout, cfg.LogLevel))
 
-	// --- DB ---
+	// --- Postgres ---
 	db, err := database.Connect(cfg.Postgres, cfg.Env)
 	if err != nil {
-		log.Fatalf("postgres: %v", err)
+		logger.Error("postgres", "err", err)
+		os.Exit(1)
 	}
-
-	// --- Migrations ---
 	if err := migrations.Run(db); err != nil {
-		log.Fatalf("migrations: %v", err)
+		logger.Error("migrations", "err", err)
+		os.Exit(1)
 	}
 
 	// --- Redis ---
 	redis, err := cache.New(cfg.Redis)
 	if err != nil {
-		log.Fatalf("redis: %v", err)
+		logger.Error("redis", "err", err)
+		os.Exit(1)
 	}
-	_ = redis // reserved for future caching layers
 
-	// --- Seed (admin, settings, categories) ---
+	// --- Seed ---
 	if err := seed.Run(context.Background(), db, cfg); err != nil {
-		log.Fatalf("seed: %v", err)
+		logger.Error("seed", "err", err)
+		os.Exit(1)
 	}
 
 	// --- Repositories ---
 	userRepo := repositories.NewUserRepository(db)
+	customerRepo := repositories.NewCustomerRepository(db)
 	sellerRepo := repositories.NewSellerRepository(db)
+	driverRepo := repositories.NewDriverRepository(db)
 	categoryRepo := repositories.NewCategoryRepository(db)
+	subcategoryRepo := repositories.NewSubcategoryRepository(db)
+	brandRepo := repositories.NewBrandRepository(db)
 	productRepo := repositories.NewProductRepository(db)
-	reviewRepo := repositories.NewReviewRepository(db)
+	orderRepo := repositories.NewOrderRepository(db)
+	cartRepo := repositories.NewCartRepository(db)
 	favoriteRepo := repositories.NewFavoriteRepository(db)
+	reviewRepo := repositories.NewReviewRepository(db)
+	bannerRepo := repositories.NewBannerRepository(db)
 	settingRepo := repositories.NewSettingRepository(db)
 	trackingRepo := repositories.NewTrackingRepository(db)
+	notificationRepo := repositories.NewNotificationRepository(db)
+	chatRepo := repositories.NewChatRepository(db)
+	txRepo := repositories.NewTransactionRepository(db)
 
-	// --- JWT ---
+	// --- Infra services ---
 	jm := appjwt.NewManager(cfg.JWT.Secret, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL)
-
-	// --- Services ---
-	authSvc := services.NewAuthService(userRepo, sellerRepo, jm)
-	userSvc := services.NewUserService(userRepo)
-	categorySvc := services.NewCategoryService(categoryRepo)
-	sellerSvc := services.NewSellerService(sellerRepo)
-	productSvc := services.NewProductService(productRepo, sellerRepo, categoryRepo, settingRepo, services.ContactDefaults{
-		Phone:    cfg.Market.Phone,
-		WhatsApp: cfg.Market.WhatsApp,
-	})
-	reviewSvc := services.NewReviewService(reviewRepo, productRepo)
-	favoriteSvc := services.NewFavoriteService(favoriteRepo, productRepo)
-	settingSvc := services.NewSettingService(settingRepo)
-	trackingSvc := services.NewTrackingService(productRepo, trackingRepo)
+	googleOAuth := oauth.NewGoogle(cfg.Google)
+	hub := ws.NewHub(redis)
 	uploadSvc, err := services.NewUploadService(cfg.Upload.Dir, cfg.Upload.PublicBase, cfg.Upload.MaxSizeMB)
 	if err != nil {
-		log.Fatalf("upload: %v", err)
+		logger.Error("upload", "err", err)
+		os.Exit(1)
 	}
 
-	// --- Handlers ---
+	// --- Domain services ---
+	notifySvc := services.NewNotificationService(notificationRepo, redis)
+	authSvc := services.NewAuthService(userRepo, customerRepo, jm)
+	userSvc := services.NewUserService(userRepo)
+	catalogSvc := services.NewCatalogService(categoryRepo, subcategoryRepo, brandRepo)
+	sellerSvc := services.NewSellerService(sellerRepo, userRepo)
+	driverSvc := services.NewDriverService(driverRepo, userRepo)
+	customerSvc := services.NewCustomerService(customerRepo, userRepo)
+	productSvc := services.NewProductService(productRepo, sellerRepo, categoryRepo, notifySvc, services.ContactDefaults{
+		Phone: cfg.Market.Phone, WhatsApp: cfg.Market.WhatsApp, Telegram: cfg.Market.Telegram,
+	})
+	orderSvc := services.NewOrderService(orderRepo, productRepo, customerRepo, driverRepo, txRepo, cartRepo, notifySvc)
+	cartSvc := services.NewCartService(cartRepo, productRepo)
+	favoriteSvc := services.NewFavoriteService(favoriteRepo, productRepo)
+	reviewSvc := services.NewReviewService(reviewRepo, productRepo)
+	bannerSvc := services.NewBannerService(bannerRepo)
+	settingSvc := services.NewSettingService(settingRepo)
+	trackingSvc := services.NewTrackingService(productRepo, trackingRepo)
+	chatSvc := services.NewChatService(chatRepo, customerRepo, redis)
+	reportSvc := services.NewReportService(txRepo, orderRepo)
+
+	// --- Handlers / router ---
 	deps := &server.Deps{
-		Auth:     handlers.NewAuthHandler(authSvc),
-		Category: handlers.NewCategoryHandler(categorySvc),
-		Seller:   handlers.NewSellerHandler(sellerSvc, productSvc, trackingSvc),
-		Product:  handlers.NewProductHandler(productSvc, sellerSvc, favoriteSvc, reviewSvc),
-		Review:   handlers.NewReviewHandler(reviewSvc),
-		Favorite: handlers.NewFavoriteHandler(favoriteSvc),
-		Tracking: handlers.NewTrackingHandler(trackingSvc),
-		Setting:  handlers.NewSettingHandler(settingSvc),
-		Upload:   handlers.NewUploadHandler(uploadSvc),
-		Admin:    handlers.NewAdminHandler(userSvc, trackingSvc),
-		JWT:      jm,
-		Cfg:      cfg,
+		Auth:         handlers.NewAuthHandler(authSvc, googleOAuth),
+		Catalog:      handlers.NewCatalogHandler(catalogSvc),
+		Product:      handlers.NewProductHandler(productSvc, sellerSvc, reviewSvc),
+		Seller:       handlers.NewSellerHandler(sellerSvc, trackingSvc),
+		Customer:     handlers.NewCustomerHandler(customerSvc),
+		Driver:       handlers.NewDriverHandler(driverSvc, orderSvc),
+		Order:        handlers.NewOrderHandler(orderSvc, cartSvc, customerSvc, settingSvc),
+		Cart:         handlers.NewCartHandler(cartSvc, customerSvc),
+		Favorite:     handlers.NewFavoriteHandler(favoriteSvc),
+		Review:       handlers.NewReviewHandler(reviewSvc),
+		Banner:       handlers.NewBannerHandler(bannerSvc),
+		Setting:      handlers.NewSettingHandler(settingSvc),
+		Tracking:     handlers.NewTrackingHandler(trackingSvc),
+		Notification: handlers.NewNotificationHandler(notifySvc),
+		Chat:         handlers.NewChatHandler(chatSvc, hub),
+		NotifySocket: handlers.NewNotifySocketHandler(hub),
+		Report:       handlers.NewReportHandler(reportSvc),
+		Export:       handlers.NewExportHandler(productSvc, catalogSvc, orderSvc, customerSvc, sellerSvc, driverSvc, reportSvc, txRepo),
+		Board:        handlers.NewBoardHandler(catalogSvc, productSvc),
+		SEO:          handlers.NewSEOHandler(productSvc, catalogSvc, sellerSvc, cfg.PublicURL),
+		Upload:       handlers.NewUploadHandler(uploadSvc),
+		Admin:        handlers.NewAdminHandler(userSvc, trackingSvc),
+		JWT:          jm,
+		Cfg:          cfg,
 	}
 	r := server.New(deps)
 
@@ -102,16 +139,17 @@ func main() {
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           r,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       90 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
-		log.Printf("AliStroy API listening on %s (env=%s)", addr, cfg.Env)
+		logger.Info("AliStroy API listening", "addr", addr, "env", cfg.Env)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %v", err)
+			logger.Error("listen", "err", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -119,10 +157,10 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 
-	log.Println("shutting down...")
+	logger.Info("shutting down")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("shutdown: %v", err)
+		logger.Error("shutdown", "err", err)
 	}
 }

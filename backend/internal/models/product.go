@@ -2,46 +2,55 @@ package models
 
 import "github.com/google/uuid"
 
-// Product is the central marketplace entity. All public-facing fields are bilingual.
+// Product is the central marketplace entity. Bilingual TJ/RU. Goes through a
+// pending → approved flow; admin sets the sale price + contact owner.
 type Product struct {
 	BaseModel
-	SellerID   uuid.UUID `gorm:"type:uuid;index;not null" json:"seller_id"`
-	CategoryID uuid.UUID `gorm:"type:uuid;index;not null" json:"category_id"`
+	SellerID      uuid.UUID  `gorm:"type:uuid;index;not null" json:"seller_id"`
+	CategoryID    uuid.UUID  `gorm:"type:uuid;index;not null" json:"category_id"`
+	SubcategoryID *uuid.UUID `gorm:"type:uuid;index" json:"subcategory_id,omitempty"`
+	BrandID       *uuid.UUID `gorm:"type:uuid;index" json:"brand_id,omitempty"`
 
-	Slug string `gorm:"size:220;uniqueIndex;not null" json:"slug"`
-	SKU  string `gorm:"size:64;index" json:"sku"`
-
-	TitleTJ       string `gorm:"size:255;not null" json:"title_tj"`
-	TitleRU       string `gorm:"size:255;not null" json:"title_ru"`
+	Slug          string `gorm:"size:255;uniqueIndex;not null" json:"slug"`
+	SKU           string `gorm:"size:64;index" json:"sku"`
+	NameTJ        string `gorm:"size:255;not null" json:"name_tj"`
+	NameRU        string `gorm:"size:255;not null" json:"name_ru"`
 	DescriptionTJ string `gorm:"type:text" json:"description_tj"`
 	DescriptionRU string `gorm:"type:text" json:"description_ru"`
 
-	Price         float64 `gorm:"type:numeric(14,2);not null;default:0" json:"price"`
-	Currency      string  `gorm:"size:8;not null;default:TJS" json:"currency"`
-	Unit          string  `gorm:"size:20;not null;default:pcs" json:"unit"`
-	StockQuantity int     `gorm:"not null;default:0" json:"stock_quantity"`
-	IsAvailable   bool    `gorm:"not null;default:true;index" json:"is_available"`
+	Unit            string  `gorm:"size:20;not null;default:pcs" json:"unit"`
+	Currency        string  `gorm:"size:8;not null;default:TJS" json:"currency"`
+	CostPrice       float64 `gorm:"type:numeric(14,2);not null;default:0" json:"cost_price"` // seller's price
+	SalePrice       float64 `gorm:"type:numeric(14,2);not null;default:0" json:"sale_price"` // public price (admin sets)
+	DiscountPercent float64 `gorm:"type:numeric(5,2);not null;default:0" json:"discount_percent"`
+	StockQuantity   int     `gorm:"not null;default:0" json:"stock_quantity"`
+	MinimumStock    int     `gorm:"not null;default:0" json:"minimum_stock"`
+	IsAvailable     bool    `gorm:"not null;default:true;index" json:"is_available"`
+	IsFeatured      bool    `gorm:"not null;default:false;index" json:"is_featured"`
 
-	// Contact-routing fields configured by admin during moderation.
-	ContactType    string `gorm:"size:10;not null;default:admin" json:"contact_type"` // "admin" | "seller"
-	PhoneNumber    string `gorm:"size:32" json:"phone_number"`
-	WhatsAppNumber string `gorm:"size:32" json:"whatsapp_number"`
+	// Contact routing chosen by admin during moderation.
+	ContactOwner    string `gorm:"size:10;not null;default:admin" json:"contact_owner"` // admin|seller
+	ContactPhone    string `gorm:"size:32" json:"contact_phone"`
+	ContactWhatsApp string `gorm:"size:32" json:"contact_whatsapp"`
+	ContactTelegram string `gorm:"size:32" json:"contact_telegram"`
 
 	Status        string `gorm:"size:20;not null;default:draft;index" json:"status"`
 	RejectionNote string `gorm:"type:text" json:"rejection_note"`
-	IsFeatured    bool   `gorm:"not null;default:false;index" json:"is_featured"`
 
-	// Aggregated tracking counters (updated atomically).
+	// Aggregated tracking counters (atomically incremented).
 	ViewsCount     int64 `gorm:"not null;default:0" json:"views_count"`
 	PhoneClicks    int64 `gorm:"not null;default:0" json:"phone_clicks"`
 	WhatsAppClicks int64 `gorm:"not null;default:0" json:"whatsapp_clicks"`
+	TelegramClicks int64 `gorm:"not null;default:0" json:"telegram_clicks"`
 
-	Seller   *Seller        `gorm:"foreignKey:SellerID" json:"seller,omitempty"`
-	Category *Category      `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
-	Images   []ProductImage `gorm:"foreignKey:ProductID;constraint:OnDelete:CASCADE" json:"images,omitempty"`
+	Seller      *Seller        `gorm:"foreignKey:SellerID" json:"seller,omitempty"`
+	Category    *Category      `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
+	Subcategory *Subcategory   `gorm:"foreignKey:SubcategoryID" json:"subcategory,omitempty"`
+	Brand       *Brand         `gorm:"foreignKey:BrandID" json:"brand,omitempty"`
+	Images      []ProductImage `gorm:"foreignKey:ProductID;constraint:OnDelete:CASCADE" json:"images,omitempty"`
 }
 
-// ProductImage is a single image associated with a product.
+// ProductImage stores one image per row, ordered by SortOrder.
 type ProductImage struct {
 	BaseModel
 	ProductID uuid.UUID `gorm:"type:uuid;index;not null" json:"product_id"`
@@ -50,3 +59,6 @@ type ProductImage struct {
 	SortOrder int       `gorm:"not null;default:0;index" json:"sort_order"`
 	IsCover   bool      `gorm:"not null;default:false" json:"is_cover"`
 }
+
+// Profit returns SalePrice - CostPrice.
+func (p *Product) Profit() float64 { return p.SalePrice - p.CostPrice }

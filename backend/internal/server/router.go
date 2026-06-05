@@ -10,19 +10,30 @@ import (
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/models"
 )
 
-// Deps groups all the wired-up handlers. The router knows nothing about
-// services or repositories — only handlers + middleware.
+// Deps holds every wired handler plus shared infra used by the router.
 type Deps struct {
-	Auth     *handlers.AuthHandler
-	Category *handlers.CategoryHandler
-	Seller   *handlers.SellerHandler
-	Product  *handlers.ProductHandler
-	Review   *handlers.ReviewHandler
-	Favorite *handlers.FavoriteHandler
-	Tracking *handlers.TrackingHandler
-	Setting  *handlers.SettingHandler
-	Upload   *handlers.UploadHandler
-	Admin    *handlers.AdminHandler
+	Auth         *handlers.AuthHandler
+	Catalog      *handlers.CatalogHandler
+	Product      *handlers.ProductHandler
+	Seller       *handlers.SellerHandler
+	Customer     *handlers.CustomerHandler
+	Driver       *handlers.DriverHandler
+	Order        *handlers.OrderHandler
+	Cart         *handlers.CartHandler
+	Favorite     *handlers.FavoriteHandler
+	Review       *handlers.ReviewHandler
+	Banner       *handlers.BannerHandler
+	Setting      *handlers.SettingHandler
+	Tracking     *handlers.TrackingHandler
+	Notification *handlers.NotificationHandler
+	Chat         *handlers.ChatHandler
+	NotifySocket *handlers.NotifySocketHandler
+	Report       *handlers.ReportHandler
+	Export       *handlers.ExportHandler
+	Board        *handlers.BoardHandler
+	SEO          *handlers.SEOHandler
+	Upload       *handlers.UploadHandler
+	Admin        *handlers.AdminHandler
 
 	JWT *appjwt.Manager
 	Cfg *config.Config
@@ -41,48 +52,56 @@ func New(d *Deps) *gin.Engine {
 	r.Use(middleware.CORS(d.Cfg.CORS.AllowedOrigins))
 	r.Use(middleware.RateLimit(d.Cfg.Rate.RPS, d.Cfg.Rate.Burst))
 
-	// Health
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
+	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
+
+	// SEO (root-level)
+	r.GET("/robots.txt", d.SEO.Robots)
+	r.GET("/sitemap.xml", d.SEO.Sitemap)
 
 	v1 := r.Group("/api/v1")
 
-	// ---- Public auth ----
+	// ---------- Public auth ----------
 	auth := v1.Group("/auth")
 	{
 		auth.POST("/register", d.Auth.Register)
 		auth.POST("/login", d.Auth.Login)
 		auth.POST("/refresh", d.Auth.Refresh)
-		auth.POST("/forgot-password", d.Auth.Forgot)
-		auth.POST("/reset-password", d.Auth.Reset)
+		auth.GET("/google/url", d.Auth.GoogleURL)
+		auth.POST("/google/callback", d.Auth.GoogleCallback)
 	}
 
-	// ---- Authenticated /me ----
+	// ---------- Authenticated self ----------
 	me := v1.Group("/me", middleware.RequireAuth(d.JWT))
 	{
 		me.GET("", d.Auth.Me)
 		me.PATCH("", d.Auth.UpdateProfile)
 		me.POST("/change-password", d.Auth.ChangePassword)
 		me.POST("/logout", d.Auth.Logout)
+
+		me.GET("/notifications", d.Notification.List)
+		me.GET("/notifications/unread", d.Notification.UnreadCount)
+		me.POST("/notifications/:id/read", d.Notification.MarkRead)
+		me.POST("/notifications/read-all", d.Notification.MarkAllRead)
+		me.GET("/notifications/socket", d.NotifySocket.Socket)
 	}
 
-	// ---- Public catalog ----
-	v1.GET("/categories", d.Category.List)
-	v1.GET("/categories/popular", d.Category.Popular)
-	v1.GET("/categories/:slug", d.Category.GetBySlug)
+	// ---------- Public catalog ----------
+	v1.GET("/categories", d.Catalog.ListCategories)
+	v1.GET("/categories/popular", d.Catalog.PopularCategories)
+	v1.GET("/categories/:slug", d.Catalog.GetCategoryBySlug)
+	v1.GET("/brands", d.Catalog.ListBrands)
+	v1.GET("/banners", d.Banner.Public)
+	v1.GET("/settings/public", d.Setting.Public)
 
 	v1.GET("/sellers", d.Seller.List)
 	v1.GET("/sellers/top", d.Seller.Top)
 	v1.GET("/sellers/:slug", d.Seller.GetBySlug)
 
 	v1.GET("/products", d.Product.List)
+	v1.GET("/products/price-bounds", d.Product.PriceBounds)
 	v1.GET("/products/:slug", d.Product.GetBySlug)
-	v1.GET("/products/:slug/reviews", func(c *gin.Context) {
-		// For simplicity, by-id endpoint exists below; alias by slug not needed.
-		c.AbortWithStatusJSON(404, gin.H{"error": gin.H{"code": "not_found", "message": "use /products/id/:id/reviews"}})
-	})
-	// By-id read paths used after fetching product detail
+
+	// by-id read paths used after fetching a product detail
 	byID := v1.Group("/products/id/:id")
 	{
 		byID.GET("/related", d.Product.Related)
@@ -90,11 +109,11 @@ func New(d *Deps) *gin.Engine {
 		byID.POST("/track", middleware.OptionalAuth(d.JWT), d.Tracking.Track)
 	}
 
-	// ---- Settings (public read) ----
-	v1.GET("/settings/public", d.Setting.Public)
+	// subcategories for a category (public)
+	v1.GET("/categories/id/:id/subcategories", d.Catalog.ListSubcategories)
 
-	// ---- Authenticated user actions ----
-	user := v1.Group("/", middleware.RequireAuth(d.JWT))
+	// ---------- Authenticated customer actions ----------
+	user := v1.Group("", middleware.RequireAuth(d.JWT))
 	{
 		user.GET("/favorites", d.Favorite.List)
 		user.POST("/favorites/:id", d.Favorite.Add)
@@ -104,56 +123,147 @@ func New(d *Deps) *gin.Engine {
 		user.POST("/products/id/:id/reviews", d.Review.Create)
 	}
 
-	// ---- Seller-only ----
+	// customer-only (must have customer profile)
+	cust := v1.Group("/customer", middleware.RequireRoles(d.JWT, models.RoleCustomer))
+	{
+		cust.GET("/cart", d.Cart.List)
+		cust.POST("/cart", d.Cart.Set)
+		cust.DELETE("/cart/:id", d.Cart.Remove)
+		cust.DELETE("/cart", d.Cart.Clear)
+
+		cust.POST("/checkout", d.Order.Checkout)
+		cust.GET("/orders", d.Order.MyOrders)
+
+		cust.GET("/chat/room", d.Chat.MyRoom)
+		cust.GET("/chat/messages", d.Chat.MyMessages)
+		cust.POST("/chat/messages", d.Chat.CustomerSend)
+		cust.GET("/chat/socket", d.Chat.CustomerSocket)
+		cust.POST("/upload", d.Upload.Upload)
+	}
+
+	// ---------- Seller-only ----------
 	seller := v1.Group("/seller", middleware.RequireRoles(d.JWT, models.RoleSeller))
 	{
 		seller.GET("/me", d.Seller.Me)
 		seller.PATCH("/me", d.Seller.UpdateMe)
 		seller.GET("/stats", d.Seller.MyStats)
-
 		seller.GET("/products", d.Product.MyList)
 		seller.POST("/products", d.Product.MyCreate)
 		seller.PATCH("/products/:id", d.Product.MyUpdate)
 		seller.DELETE("/products/:id", d.Product.MyDelete)
-
 		seller.POST("/upload", d.Upload.Upload)
 	}
 
-	// ---- Admin-only ----
+	// ---------- Driver-only ----------
+	driver := v1.Group("/driver", middleware.RequireRoles(d.JWT, models.RoleDriver))
+	{
+		driver.GET("/me", d.Driver.Me)
+		driver.GET("/orders", d.Driver.MyOrders)
+		driver.POST("/orders/:id/status", d.Order.DriverUpdateStatus)
+	}
+
+	// ---------- Admin-only ----------
 	admin := v1.Group("/admin", middleware.RequireRoles(d.JWT, models.RoleAdmin))
 	{
 		admin.GET("/dashboard", d.Admin.Dashboard)
-		admin.GET("/totals", d.Tracking.AdminTotals)
+		admin.POST("/upload", d.Upload.Upload)
 
+		// users
 		admin.GET("/users", d.Admin.ListUsers)
 		admin.GET("/users/:id", d.Admin.GetUser)
 		admin.PATCH("/users/:id", d.Admin.UpdateUser)
 		admin.DELETE("/users/:id", d.Admin.DeleteUser)
 
-		admin.GET("/categories", d.Category.AdminList)
-		admin.POST("/categories", d.Category.Create)
-		admin.PATCH("/categories/:id", d.Category.Update)
-		admin.DELETE("/categories/:id", d.Category.Delete)
+		// categories
+		admin.GET("/categories", d.Catalog.AdminListCategories)
+		admin.POST("/categories", d.Catalog.CreateCategory)
+		admin.PATCH("/categories/:id", d.Catalog.UpdateCategory)
+		admin.DELETE("/categories/:id", d.Catalog.DeleteCategory)
 
+		// subcategories
+		admin.POST("/subcategories", d.Catalog.CreateSubcategory)
+		admin.PATCH("/subcategories/:id", d.Catalog.UpdateSubcategory)
+		admin.DELETE("/subcategories/:id", d.Catalog.DeleteSubcategory)
+
+		// brands
+		admin.GET("/brands", d.Catalog.ListBrands)
+		admin.POST("/brands", d.Catalog.CreateBrand)
+		admin.PATCH("/brands/:id", d.Catalog.UpdateBrand)
+		admin.DELETE("/brands/:id", d.Catalog.DeleteBrand)
+
+		// banners
+		admin.GET("/banners", d.Banner.AdminList)
+		admin.POST("/banners", d.Banner.Create)
+		admin.PATCH("/banners/:id", d.Banner.Update)
+		admin.DELETE("/banners/:id", d.Banner.Delete)
+
+		// sellers
 		admin.GET("/sellers", d.Seller.AdminList)
 		admin.GET("/sellers/:id", d.Seller.AdminGet)
+		admin.POST("/sellers", d.Seller.AdminCreate)
 		admin.PATCH("/sellers/:id", d.Seller.AdminUpdate)
 		admin.DELETE("/sellers/:id", d.Seller.AdminDelete)
 
+		// customers
+		admin.GET("/customers", d.Customer.AdminList)
+		admin.GET("/customers/:id", d.Customer.AdminGet)
+		admin.POST("/customers", d.Customer.AdminCreate)
+		admin.PATCH("/customers/:id", d.Customer.AdminUpdate)
+		admin.DELETE("/customers/:id", d.Customer.AdminDelete)
+
+		// drivers
+		admin.GET("/drivers", d.Driver.AdminList)
+		admin.GET("/drivers/:id", d.Driver.AdminGet)
+		admin.POST("/drivers", d.Driver.AdminCreate)
+		admin.PATCH("/drivers/:id", d.Driver.AdminUpdate)
+		admin.DELETE("/drivers/:id", d.Driver.AdminDelete)
+
+		// products
 		admin.GET("/products", d.Product.AdminList)
 		admin.GET("/products/:id", d.Product.AdminGet)
+		admin.POST("/products", d.Product.AdminCreate)
 		admin.PATCH("/products/:id", d.Product.AdminUpdate)
 		admin.POST("/products/:id/moderate", d.Product.AdminModerate)
 		admin.DELETE("/products/:id", d.Product.AdminDelete)
 
+		// orders
+		admin.GET("/orders", d.Order.AdminList)
+		admin.GET("/orders/:id", d.Order.AdminGet)
+		admin.POST("/orders", d.Order.AdminCreate)
+		admin.POST("/orders/:id/status", d.Order.AdminUpdateStatus)
+		admin.GET("/orders/:id/receipt", d.Order.Receipt)
+		admin.DELETE("/orders/:id", d.Order.AdminDelete)
+
+		// reviews
 		admin.GET("/reviews", d.Review.AdminList)
 		admin.POST("/reviews/:id/moderate", d.Review.AdminModerate)
 		admin.DELETE("/reviews/:id", d.Review.AdminDelete)
 
+		// chat
+		admin.GET("/chat/rooms", d.Chat.AdminRooms)
+		admin.GET("/chat/rooms/:id/messages", d.Chat.AdminMessages)
+		admin.POST("/chat/rooms/:id/messages", d.Chat.AdminSend)
+		admin.GET("/chat/rooms/:id/socket", d.Chat.AdminSocket)
+
+		// reports + accounting
+		admin.GET("/reports/summary", d.Report.Summary)
+		admin.GET("/reports/transactions", d.Report.Transactions)
+
+		// exports
+		admin.GET("/export/products", d.Export.Products)
+		admin.GET("/export/categories", d.Export.Categories)
+		admin.GET("/export/orders", d.Export.Orders)
+		admin.GET("/export/customers", d.Export.Customers)
+		admin.GET("/export/sellers", d.Export.Sellers)
+		admin.GET("/export/drivers", d.Export.Drivers)
+		admin.GET("/export/report", d.Export.Transactions)
+
+		// visual board
+		admin.GET("/board", d.Board.Tree)
+
+		// settings
 		admin.GET("/settings", d.Setting.AdminGet)
 		admin.PATCH("/settings", d.Setting.AdminUpdate)
-
-		admin.POST("/upload", d.Upload.Upload)
 	}
 
 	return r

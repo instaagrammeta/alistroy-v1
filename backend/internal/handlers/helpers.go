@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -11,10 +12,8 @@ import (
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/services"
 )
 
-// parseUUID extracts and validates a UUID from a path param. Writes a 400 on failure.
 func parseUUID(c *gin.Context, name string) (uuid.UUID, bool) {
-	raw := c.Param(name)
-	id, err := uuid.Parse(raw)
+	id, err := uuid.Parse(c.Param(name))
 	if err != nil {
 		httpx.BadRequest(c, "invalid "+name)
 		return uuid.Nil, false
@@ -35,39 +34,43 @@ func optionalUUIDQuery(c *gin.Context, name string) *uuid.UUID {
 }
 
 func intQuery(c *gin.Context, name string, def int) int {
-	v := c.Query(name)
-	if v == "" {
-		return def
+	if v := c.Query(name); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return def
-	}
-	return n
+	return def
 }
 
 func float64Query(c *gin.Context, name string) *float64 {
-	v := c.Query(name)
-	if v == "" {
-		return nil
+	if v := c.Query(name); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return &f
+		}
 	}
-	f, err := strconv.ParseFloat(v, 64)
-	if err != nil {
-		return nil
-	}
-	return &f
+	return nil
 }
 
 func boolQuery(c *gin.Context, name string) *bool {
+	if v := c.Query(name); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return &b
+		}
+	}
+	return nil
+}
+
+func dateQuery(c *gin.Context, name string) *time.Time {
 	v := c.Query(name)
 	if v == "" {
 		return nil
 	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return nil
+	for _, layout := range []string{time.RFC3339, "2006-01-02"} {
+		if t, err := time.Parse(layout, v); err == nil {
+			return &t
+		}
 	}
-	return &b
+	return nil
 }
 
 func paginate(c *gin.Context) (page, size int) {
@@ -76,29 +79,12 @@ func paginate(c *gin.Context) (page, size int) {
 	if page < 1 {
 		page = 1
 	}
-	if size < 1 || size > 100 {
+	if size < 1 || size > 200 {
 		size = 20
 	}
 	return
 }
 
-func newPagination(page, size int, total int64) *httpx.Pagination {
-	totalPages := 1
-	if size > 0 {
-		totalPages = int((total + int64(size) - 1) / int64(size))
-		if totalPages < 1 {
-			totalPages = 1
-		}
-	}
-	return &httpx.Pagination{
-		Page:       page,
-		PageSize:   size,
-		Total:      total,
-		TotalPages: totalPages,
-	}
-}
-
-// mapServiceError translates well-known service errors to HTTP responses.
 func mapServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrNotFound):

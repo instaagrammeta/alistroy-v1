@@ -29,11 +29,7 @@ type Manager struct {
 }
 
 func NewManager(secret string, accessTTL, refreshTTL time.Duration) *Manager {
-	return &Manager{
-		secret:     []byte(secret),
-		accessTTL:  accessTTL,
-		refreshTTL: refreshTTL,
-	}
+	return &Manager{secret: []byte(secret), accessTTL: accessTTL, refreshTTL: refreshTTL}
 }
 
 func (m *Manager) Generate(userID uuid.UUID, role string, t TokenType) (string, time.Time, error) {
@@ -47,11 +43,8 @@ func (m *Manager) Generate(userID uuid.UUID, role string, t TokenType) (string, 
 	default:
 		return "", time.Time{}, errors.New("unknown token type")
 	}
-
 	claims := Claims{
-		UserID: userID,
-		Role:   role,
-		Type:   t,
+		UserID: userID, Role: role, Type: t,
 		RegisteredClaims: jwtlib.RegisteredClaims{
 			IssuedAt:  jwtlib.NewNumericDate(now),
 			ExpiresAt: jwtlib.NewNumericDate(exp),
@@ -59,28 +52,24 @@ func (m *Manager) Generate(userID uuid.UUID, role string, t TokenType) (string, 
 			Subject:   userID.String(),
 		},
 	}
-
 	token := jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, claims)
 	signed, err := token.SignedString(m.secret)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	return signed, exp, nil
+	return signed, exp, err
 }
 
 func (m *Manager) Parse(tokenStr string) (*Claims, error) {
-	token, err := jwtlib.ParseWithClaims(tokenStr, &Claims{}, func(t *jwtlib.Token) (any, error) {
+	tok, err := jwtlib.ParseWithClaims(tokenStr, &Claims{}, func(t *jwtlib.Token) (any, error) {
 		if _, ok := t.Method.(*jwtlib.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
+			return nil, errors.New("bad alg")
 		}
 		return m.secret, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
-		return nil, errors.New("invalid token")
+	claims, ok := tok.Claims.(*Claims)
+	if !ok || !tok.Valid {
+		return nil, errors.New("invalid")
 	}
 	return claims, nil
 }

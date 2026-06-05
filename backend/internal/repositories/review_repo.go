@@ -16,14 +16,16 @@ func NewReviewRepository(db *gorm.DB) *ReviewRepository { return &ReviewReposito
 func (r *ReviewRepository) Create(ctx context.Context, rv *models.Review) error {
 	return r.db.WithContext(ctx).Create(rv).Error
 }
-
-func (r *ReviewRepository) Update(ctx context.Context, rv *models.Review) error {
+func (r *ReviewRepository) Save(ctx context.Context, rv *models.Review) error {
 	return r.db.WithContext(ctx).Save(rv).Error
 }
-
+func (r *ReviewRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Delete(&models.Review{}, "id = ?", id).Error
+}
 func (r *ReviewRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.Review, error) {
 	var rv models.Review
-	if err := r.db.WithContext(ctx).Preload("User").First(&rv, "id = ?", id).Error; err != nil {
+	err := r.db.WithContext(ctx).Preload("User").Preload("Product").First(&rv, "id = ?", id).Error
+	if err != nil {
 		return nil, err
 	}
 	return &rv, nil
@@ -33,7 +35,7 @@ type ListReviewsParams struct {
 	ProductID *uuid.UUID
 	Status    string
 	Page      int
-	PageSize  int
+	Size      int
 }
 
 func (r *ReviewRepository) List(ctx context.Context, p ListReviewsParams) ([]models.Review, int64, error) {
@@ -48,15 +50,13 @@ func (r *ReviewRepository) List(ctx context.Context, p ListReviewsParams) ([]mod
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	off := applyPaging(&p.Page, &p.Size)
 	var items []models.Review
-	err := q.Order("created_at DESC").
-		Limit(p.PageSize).Offset((p.Page - 1) * p.PageSize).
-		Find(&items).Error
+	err := q.Order("created_at DESC").Limit(p.Size).Offset(off).Find(&items).Error
 	return items, total, err
 }
 
-// AverageRating returns avg rating + count for approved reviews of a product.
-func (r *ReviewRepository) AverageRating(ctx context.Context, productID uuid.UUID) (float64, int64, error) {
+func (r *ReviewRepository) Average(ctx context.Context, productID uuid.UUID) (float64, int64, error) {
 	type row struct {
 		Avg float64
 		Cnt int64
@@ -64,11 +64,7 @@ func (r *ReviewRepository) AverageRating(ctx context.Context, productID uuid.UUI
 	var x row
 	err := r.db.WithContext(ctx).Model(&models.Review{}).
 		Select("COALESCE(AVG(rating),0) AS avg, COUNT(*) AS cnt").
-		Where("product_id = ? AND status = ?", productID, "approved").
+		Where("product_id = ? AND status = ?", productID, models.ReviewStatusApproved).
 		Scan(&x).Error
 	return x.Avg, x.Cnt, err
-}
-
-func (r *ReviewRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	return r.db.WithContext(ctx).Delete(&models.Review{}, "id = ?", id).Error
 }
