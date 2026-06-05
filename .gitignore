@@ -1,0 +1,41 @@
+# Env
+.env
+.env.local
+*.env
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Backend (Go)
+backend/bin/
+backend/tmp/
+backend/coverage.out
+backend/uploads/
+!backend/uploads/.gitkeep
+
+# Frontend (Nuxt)
+frontend/node_modules/
+frontend/.nuxt/
+frontend/.output/
+frontend/dist/
+frontend/.data/
+frontend/.cache/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Docker volumes
+postgres-data/
+redis-data/
+uploads/
