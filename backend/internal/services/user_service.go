@@ -16,28 +16,9 @@ type UserService struct {
 
 func NewUserService(u *repositories.UserRepository) *UserService { return &UserService{users: u} }
 
-type ListUsersInput struct {
-	Role     string
-	Search   string
-	Page     int
-	PageSize int
+func (s *UserService) List(ctx context.Context, role, status, search string, page, size int) ([]models.User, int64, error) {
+	return s.users.List(ctx, repositories.ListUsersParams{Role: role, Status: status, Search: search, Page: page, Size: size})
 }
-
-func (s *UserService) List(ctx context.Context, in ListUsersInput) ([]models.User, int64, error) {
-	if in.Page < 1 {
-		in.Page = 1
-	}
-	if in.PageSize < 1 || in.PageSize > 100 {
-		in.PageSize = 20
-	}
-	return s.users.List(ctx, repositories.ListUsersParams{
-		Role:     in.Role,
-		Search:   in.Search,
-		Page:     in.Page,
-		PageSize: in.PageSize,
-	})
-}
-
 func (s *UserService) Get(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	u, err := s.users.FindByID(ctx, id)
 	if err != nil {
@@ -52,8 +33,7 @@ func (s *UserService) Get(ctx context.Context, id uuid.UUID) (*models.User, erro
 type AdminUpdateUserInput struct {
 	Name     string
 	Phone    string
-	Role     string
-	IsActive *bool
+	Status   string
 	Password string
 }
 
@@ -68,28 +48,18 @@ func (s *UserService) AdminUpdate(ctx context.Context, id uuid.UUID, in AdminUpd
 	if in.Phone != "" {
 		u.Phone = in.Phone
 	}
-	if in.Role != "" {
-		switch in.Role {
-		case models.RoleAdmin, models.RoleSeller, models.RoleCustomer:
-			u.Role = in.Role
-		default:
-			return nil, ErrValidation
-		}
-	}
-	if in.IsActive != nil {
-		u.IsActive = *in.IsActive
+	if in.Status != "" {
+		u.Status = in.Status
 	}
 	if in.Password != "" {
 		if len(in.Password) < 8 {
 			return nil, ErrValidation
 		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
-		if err != nil {
-			return nil, err
+		if h, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost); err == nil {
+			u.PasswordHash = string(h)
 		}
-		u.PasswordHash = string(hash)
 	}
-	if err := s.users.Update(ctx, u); err != nil {
+	if err := s.users.Save(ctx, u); err != nil {
 		return nil, err
 	}
 	return u, nil

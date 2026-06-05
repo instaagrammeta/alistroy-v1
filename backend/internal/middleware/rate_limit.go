@@ -9,11 +9,11 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// RateLimit is a simple per-IP token-bucket rate limiter.
-func RateLimit(rps int, burst int) gin.HandlerFunc {
-	limiters := make(map[string]*rate.Limiter)
-	last := make(map[string]time.Time)
+// RateLimit is a per-IP token bucket limiter with periodic GC of stale entries.
+func RateLimit(rps, burst int) gin.HandlerFunc {
 	var mu sync.Mutex
+	limiters := make(map[string]*rate.Limiter)
+	seen := make(map[string]time.Time)
 
 	get := func(ip string) *rate.Limiter {
 		mu.Lock()
@@ -23,14 +23,13 @@ func RateLimit(rps int, burst int) gin.HandlerFunc {
 			l = rate.NewLimiter(rate.Limit(rps), burst)
 			limiters[ip] = l
 		}
-		last[ip] = time.Now()
-		// occasional GC of old entries
-		if len(limiters) > 5000 {
-			cutoff := time.Now().Add(-30 * time.Minute)
-			for k, t := range last {
-				if t.Before(cutoff) {
+		seen[ip] = time.Now()
+		if len(limiters) > 10000 {
+			cut := time.Now().Add(-30 * time.Minute)
+			for k, t := range seen {
+				if t.Before(cut) {
 					delete(limiters, k)
-					delete(last, k)
+					delete(seen, k)
 				}
 			}
 		}
@@ -38,8 +37,7 @@ func RateLimit(rps int, burst int) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		ip := c.ClientIP()
-		if !get(ip).Allow() {
+		if !get(c.ClientIP()).Allow() {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error": gin.H{"code": "rate_limited", "message": "too many requests"},
 			})

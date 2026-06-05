@@ -7,5 +7,4 @@ uploads/*
 !uploads/.gitkeep
 *.log
 .git
-.gitignore
 README.md

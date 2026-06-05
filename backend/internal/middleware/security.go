@@ -2,13 +2,13 @@ package middleware
 
 import "github.com/gin-gonic/gin"
 
-// SecurityHeaders adds a set of recommended security headers to every response.
 func SecurityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
-		c.Writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
-		c.Writer.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
+		h := c.Writer.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "SAMEORIGIN")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("X-XSS-Protection", "1; mode=block")
 		c.Next()
 	}
 }

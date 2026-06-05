@@ -5,157 +5,209 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/models"
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/repositories"
 )
 
 type SellerService struct {
-	repo *repositories.SellerRepository
+	sellers *repositories.SellerRepository
+	users   *repositories.UserRepository
 }
 
-func NewSellerService(repo *repositories.SellerRepository) *SellerService {
-	return &SellerService{repo: repo}
+func NewSellerService(s *repositories.SellerRepository, u *repositories.UserRepository) *SellerService {
+	return &SellerService{sellers: s, users: u}
 }
 
-type SellerProfileInput struct {
-	Name          string
-	DescriptionTJ string
-	DescriptionRU string
-	LogoURL       string
-	Phone         string
-	WhatsApp      string
-	Address       string
-	City          string
+// SellerInput holds everything admin enters to create a seller (incl. login).
+type SellerInput struct {
+	FullName         string
+	CompanyName      string
+	MarketName       string
+	Phone            string
+	PhoneAlt         string
+	WhatsApp         string
+	Telegram         string
+	TelegramUsername string
+	Address          string
+	City             string
+	BusinessCategory *uuid.UUID
+	Notes            string
+	LogoURL          string
+	Login            string
+	Password         string
+	Active           *bool
+	IsFeatured       *bool
 }
 
-func (s *SellerService) GetByID(ctx context.Context, id uuid.UUID) (*models.Seller, error) {
-	out, err := s.repo.FindByID(ctx, id)
+// CreateByAdmin creates a seller User (role=seller) + Seller profile.
+func (s *SellerService) CreateByAdmin(ctx context.Context, in SellerInput) (*models.Seller, error) {
+	if strings.TrimSpace(in.FullName) == "" || strings.TrimSpace(in.Login) == "" || in.Password == "" {
+		return nil, ErrValidation
+	}
+	if exists, _ := s.users.FindByLogin(ctx, in.Login); exists != nil {
+		return nil, ErrConflict
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
-		if repositories.IsNotFound(err) {
-			return nil, ErrNotFound
-		}
 		return nil, err
 	}
-	return out, nil
-}
-
-func (s *SellerService) GetBySlug(ctx context.Context, slug string) (*models.Seller, error) {
-	out, err := s.repo.FindBySlug(ctx, slug)
+	user := &models.User{
+		Name:         in.FullName,
+		Login:        in.Login,
+		Phone:        in.Phone,
+		PasswordHash: string(hash),
+		Role:         models.RoleSeller,
+		Status:       models.UserStatusActive,
+		Locale:       "tg",
+	}
+	if err := s.users.Create(ctx, user); err != nil {
+		return nil, ErrConflict
+	}
+	slug, err := uniqueSlug(ctx, firstNonEmpty(in.MarketName, in.CompanyName, in.FullName), s.sellers.ExistsBySlug)
 	if err != nil {
-		if repositories.IsNotFound(err) {
-			return nil, ErrNotFound
-		}
 		return nil, err
 	}
-	return out, nil
-}
-
-func (s *SellerService) GetByUserID(ctx context.Context, userID uuid.UUID) (*models.Seller, error) {
-	out, err := s.repo.FindByUserID(ctx, userID)
-	if err != nil {
-		if repositories.IsNotFound(err) {
-			return nil, ErrNotFound
-		}
-		return nil, err
+	seller := &models.Seller{
+		UserID:           user.ID,
+		FullName:         in.FullName,
+		CompanyName:      in.CompanyName,
+		MarketName:       in.MarketName,
+		Slug:             slug,
+		Phone:            in.Phone,
+		PhoneAlt:         in.PhoneAlt,
+		WhatsApp:         in.WhatsApp,
+		Telegram:         in.Telegram,
+		TelegramUsername: in.TelegramUsername,
+		Address:          in.Address,
+		City:             in.City,
+		BusinessCategory: in.BusinessCategory,
+		Notes:            in.Notes,
+		LogoURL:          in.LogoURL,
+		Active:           boolOr(in.Active, true),
+		IsFeatured:       boolOr(in.IsFeatured, false),
 	}
-	return out, nil
-}
-
-func (s *SellerService) UpdateOwn(ctx context.Context, userID uuid.UUID, in SellerProfileInput) (*models.Seller, error) {
-	seller, err := s.repo.FindByUserID(ctx, userID)
-	if err != nil {
-		if repositories.IsNotFound(err) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	applyProfile(seller, in)
-	if err := s.repo.Update(ctx, seller); err != nil {
+	if err := s.sellers.Create(ctx, seller); err != nil {
 		return nil, err
 	}
 	return seller, nil
 }
 
-func (s *SellerService) AdminUpdate(ctx context.Context, id uuid.UUID, in SellerProfileInput, status string, isFeatured *bool) (*models.Seller, error) {
-	seller, err := s.repo.FindByID(ctx, id)
+func (s *SellerService) UpdateByAdmin(ctx context.Context, id uuid.UUID, in SellerInput) (*models.Seller, error) {
+	seller, err := s.sellers.FindByID(ctx, id)
 	if err != nil {
-		if repositories.IsNotFound(err) {
-			return nil, ErrNotFound
-		}
+		return nil, ErrNotFound
+	}
+	applySellerFields(seller, in)
+	if in.Active != nil {
+		seller.Active = *in.Active
+	}
+	if in.IsFeatured != nil {
+		seller.IsFeatured = *in.IsFeatured
+	}
+	if err := s.sellers.Save(ctx, seller); err != nil {
 		return nil, err
 	}
-	applyProfile(seller, in)
-	if status != "" {
-		seller.Status = status
+	// Optional password reset / login update on the user.
+	if in.Password != "" || in.Login != "" {
+		if u, err := s.users.FindByID(ctx, seller.UserID); err == nil {
+			if in.Login != "" {
+				u.Login = in.Login
+			}
+			if in.Password != "" {
+				if h, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost); err == nil {
+					u.PasswordHash = string(h)
+				}
+			}
+			if in.FullName != "" {
+				u.Name = in.FullName
+			}
+			_ = s.users.Save(ctx, u)
+		}
 	}
-	if isFeatured != nil {
-		seller.IsFeatured = *isFeatured
+	return seller, nil
+}
+
+// UpdateOwn lets the seller edit their own profile (no login/active changes).
+func (s *SellerService) UpdateOwn(ctx context.Context, userID uuid.UUID, in SellerInput) (*models.Seller, error) {
+	seller, err := s.sellers.FindByUserID(ctx, userID)
+	if err != nil {
+		return nil, ErrNotFound
 	}
-	if err := s.repo.Update(ctx, seller); err != nil {
+	applySellerFields(seller, in)
+	if err := s.sellers.Save(ctx, seller); err != nil {
 		return nil, err
 	}
 	return seller, nil
 }
 
-func applyProfile(seller *models.Seller, in SellerProfileInput) {
-	if in.Name != "" {
-		seller.Name = in.Name
+func applySellerFields(seller *models.Seller, in SellerInput) {
+	if in.FullName != "" {
+		seller.FullName = in.FullName
 	}
-	if in.DescriptionTJ != "" {
-		seller.DescriptionTJ = in.DescriptionTJ
+	seller.CompanyName = firstNonEmpty(in.CompanyName, seller.CompanyName)
+	seller.MarketName = firstNonEmpty(in.MarketName, seller.MarketName)
+	if in.Phone != "" {
+		seller.Phone = in.Phone
 	}
-	if in.DescriptionRU != "" {
-		seller.DescriptionRU = in.DescriptionRU
+	seller.PhoneAlt = firstNonEmpty(in.PhoneAlt, seller.PhoneAlt)
+	seller.WhatsApp = firstNonEmpty(in.WhatsApp, seller.WhatsApp)
+	seller.Telegram = firstNonEmpty(in.Telegram, seller.Telegram)
+	seller.TelegramUsername = firstNonEmpty(in.TelegramUsername, seller.TelegramUsername)
+	seller.Address = firstNonEmpty(in.Address, seller.Address)
+	seller.City = firstNonEmpty(in.City, seller.City)
+	if in.BusinessCategory != nil {
+		seller.BusinessCategory = in.BusinessCategory
 	}
+	seller.Notes = firstNonEmpty(in.Notes, seller.Notes)
 	if in.LogoURL != "" {
 		seller.LogoURL = in.LogoURL
 	}
-	if in.Phone != "" {
-		seller.Phone = strings.TrimSpace(in.Phone)
+}
+
+func (s *SellerService) Delete(ctx context.Context, id uuid.UUID) error {
+	seller, err := s.sellers.FindByID(ctx, id)
+	if err != nil {
+		return ErrNotFound
 	}
-	if in.WhatsApp != "" {
-		seller.WhatsApp = strings.TrimSpace(in.WhatsApp)
-	}
-	if in.Address != "" {
-		seller.Address = in.Address
-	}
-	if in.City != "" {
-		seller.City = in.City
-	}
+	// Removing the user cascades to the seller + products.
+	return s.users.Delete(ctx, seller.UserID)
+}
+
+func (s *SellerService) GetByID(ctx context.Context, id uuid.UUID) (*models.Seller, error) {
+	return wrapSeller(s.sellers.FindByID(ctx, id))
+}
+func (s *SellerService) GetBySlug(ctx context.Context, slug string) (*models.Seller, error) {
+	return wrapSeller(s.sellers.FindBySlug(ctx, slug))
+}
+func (s *SellerService) GetByUserID(ctx context.Context, uid uuid.UUID) (*models.Seller, error) {
+	return wrapSeller(s.sellers.FindByUserID(ctx, uid))
 }
 
 type ListSellersInput struct {
 	Search   string
-	Status   string
+	Active   *bool
 	Featured *bool
 	Page     int
-	PageSize int
+	Size     int
 }
 
 func (s *SellerService) List(ctx context.Context, in ListSellersInput) ([]models.Seller, int64, error) {
-	if in.Page < 1 {
-		in.Page = 1
-	}
-	if in.PageSize < 1 || in.PageSize > 100 {
-		in.PageSize = 20
-	}
-	return s.repo.List(ctx, repositories.ListSellersParams{
-		Search:   in.Search,
-		Status:   in.Status,
-		Featured: in.Featured,
-		Page:     in.Page,
-		PageSize: in.PageSize,
+	return s.sellers.List(ctx, repositories.ListSellersParams{
+		Search: in.Search, Active: in.Active, Featured: in.Featured, Page: in.Page, Size: in.Size,
 	})
 }
-
 func (s *SellerService) Top(ctx context.Context, limit int) ([]models.Seller, error) {
-	if limit <= 0 || limit > 50 {
-		limit = 8
-	}
-	return s.repo.Top(ctx, limit)
+	return s.sellers.Top(ctx, limit)
 }
 
-func (s *SellerService) Delete(ctx context.Context, id uuid.UUID) error {
-	return s.repo.Delete(ctx, id)
+func wrapSeller(s *models.Seller, err error) (*models.Seller, error) {
+	if err != nil {
+		if repositories.IsNotFound(err) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return s, nil
 }

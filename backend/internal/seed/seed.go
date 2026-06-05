@@ -3,17 +3,17 @@ package seed
 import (
 	"context"
 	"errors"
-	"log"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/config"
+	"github.com/instaagrammeta/alistroy-v1/backend/internal/logger"
 	"github.com/instaagrammeta/alistroy-v1/backend/internal/models"
 )
 
-// Run seeds the bootstrap admin account, default settings, and root categories.
-// Safe to run on every boot — all operations are idempotent.
+// Run seeds the bootstrap admin, default settings and root categories.
+// Every step is idempotent and safe on each boot.
 func Run(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
 	if err := seedAdmin(ctx, db, cfg); err != nil {
 		return err
@@ -21,24 +21,20 @@ func Run(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
 	if err := seedSettings(ctx, db, cfg); err != nil {
 		return err
 	}
-	if err := seedCategories(ctx, db); err != nil {
-		return err
-	}
-	return nil
+	return seedCategories(ctx, db)
 }
 
 func seedAdmin(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
 	if cfg.Admin.Email == "" || cfg.Admin.Password == "" {
-		log.Println("[seed] admin email/password not set, skipping admin bootstrap")
+		logger.Warn("seed: admin email/password not set; skipping")
 		return nil
 	}
 	var existing models.User
 	err := db.WithContext(ctx).Where("email = ?", cfg.Admin.Email).First(&existing).Error
 	if err == nil {
-		// already present; ensure role is admin and active
-		if existing.Role != models.RoleAdmin || !existing.IsActive {
+		if existing.Role != models.RoleAdmin || existing.Status != models.UserStatusActive {
 			existing.Role = models.RoleAdmin
-			existing.IsActive = true
+			existing.Status = models.UserStatusActive
 			db.WithContext(ctx).Save(&existing)
 		}
 		return nil
@@ -52,16 +48,18 @@ func seedAdmin(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
 	}
 	u := &models.User{
 		Email:        cfg.Admin.Email,
+		Phone:        cfg.Admin.Phone,
+		Login:        "admin",
 		PasswordHash: string(hash),
 		Name:         cfg.Admin.Name,
 		Role:         models.RoleAdmin,
+		Status:       models.UserStatusActive,
 		Locale:       "tg",
-		IsActive:     true,
 	}
 	if err := db.WithContext(ctx).Create(u).Error; err != nil {
 		return err
 	}
-	log.Printf("[seed] admin account created: %s", cfg.Admin.Email)
+	logger.Info("seed: admin account created", "email", cfg.Admin.Email)
 	return nil
 }
 
@@ -71,12 +69,12 @@ func seedSettings(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
 		models.SettingSiteNameRU:       "AliStroy",
 		models.SettingTaglineTJ:        "Бозори маводи сохтмонии Тоҷикистон",
 		models.SettingTaglineRU:        "Маркетплейс строительных материалов Таджикистана",
-		models.SettingSEODescriptionTJ: "AliStroy — бозори бузурги маводи сохтмонии Тоҷикистон. Семент, хишт, ранг, асбобҳо ва дигар маводҳо аз фурӯшандагони боэътимод.",
-		models.SettingSEODescriptionRU: "AliStroy — крупнейший маркетплейс строительных материалов Таджикистана. Цемент, кирпич, краска, инструменты и многое другое от проверенных продавцов.",
+		models.SettingSEODescriptionTJ: "AliStroy — бозори бузурги маводи сохтмонии Тоҷикистон.",
+		models.SettingSEODescriptionRU: "AliStroy — крупнейший маркетплейс строительных материалов Таджикистана.",
 		models.SettingHeroTitleTJ:      "Маводи сохтмонӣ барои тамоми Тоҷикистон",
 		models.SettingHeroTitleRU:      "Строительные материалы для всего Таджикистана",
-		models.SettingHeroSubtitleTJ:   "Зиёда аз ҳазор молҳо аз фурӯшандагони боэътимод. Ёбед, муқоиса кунед ва зуд тамос гиред.",
-		models.SettingHeroSubtitleRU:   "Тысячи товаров от проверенных продавцов. Найдите, сравните и свяжитесь напрямую.",
+		models.SettingHeroSubtitleTJ:   "Ҳазорон молҳо аз фурӯшандагони боэътимод.",
+		models.SettingHeroSubtitleRU:   "Тысячи товаров от проверенных продавцов.",
 		models.SettingFooterEmail:      "info@alistroy.tj",
 		models.SettingFooterAddress:    "Душанбе, Тоҷикистон",
 	}
@@ -86,6 +84,12 @@ func seedSettings(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
 	if cfg.Market.WhatsApp != "" {
 		defaults[models.SettingMarketplaceWA] = cfg.Market.WhatsApp
 	}
+	if cfg.Market.Telegram != "" {
+		defaults[models.SettingMarketplaceTG] = cfg.Market.Telegram
+	}
+	if cfg.Market.TelegramUsername != "" {
+		defaults[models.SettingMarketplaceTGUN] = cfg.Market.TelegramUsername
+	}
 
 	for k, v := range defaults {
 		var existing models.Setting
@@ -94,25 +98,20 @@ func seedSettings(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
 			if err := db.WithContext(ctx).Create(&models.Setting{Key: k, Value: v}).Error; err != nil {
 				return err
 			}
-			continue
-		}
-		if err != nil {
+		} else if err != nil {
 			return err
 		}
-		// Existing settings are NOT overwritten — admin may have customized them.
 	}
 	return nil
 }
 
-type seedCategory struct {
-	Slug    string
-	TitleTJ string
-	TitleRU string
-	Order   int
+type seedCat struct {
+	Slug, TJ, RU string
+	Order        int
 }
 
 func seedCategories(ctx context.Context, db *gorm.DB) error {
-	cats := []seedCategory{
+	cats := []seedCat{
 		{"cement", "Семент", "Цемент", 10},
 		{"bricks", "Хишт", "Кирпич", 20},
 		{"blocks", "Блокҳо", "Блоки", 30},
@@ -127,24 +126,18 @@ func seedCategories(ctx context.Context, db *gorm.DB) error {
 		{"tools", "Асбобҳо", "Инструменты", 120},
 		{"hardware", "Маҳкамкунакҳо", "Метизы", 130},
 		{"insulation", "Изолятсия", "Изоляция", 140},
-		{"finishing-materials", "Маводи ороишӣ", "Отделочные материалы", 150},
+		{"finishing", "Маводи ороишӣ", "Отделочные материалы", 150},
 	}
 	for _, c := range cats {
 		var existing models.Category
 		err := db.WithContext(ctx).Where("slug = ?", c.Slug).First(&existing).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if err := db.WithContext(ctx).Create(&models.Category{
-				Slug:      c.Slug,
-				TitleTJ:   c.TitleTJ,
-				TitleRU:   c.TitleRU,
-				SortOrder: c.Order,
-				IsActive:  true,
+				Slug: c.Slug, NameTJ: c.TJ, NameRU: c.RU, SortOrder: c.Order, Active: true,
 			}).Error; err != nil {
 				return err
 			}
-			continue
-		}
-		if err != nil {
+		} else if err != nil {
 			return err
 		}
 	}

@@ -6,14 +6,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// TrackingEventType enumerates the events we record per product.
+// Tracking event types.
 const (
 	EventView          = "view"
 	EventPhoneClick    = "phone_click"
 	EventWhatsAppClick = "whatsapp_click"
+	EventTelegramClick = "telegram_click"
 )
 
-// TrackingEvent is an immutable analytics record. Aggregated counters are also
+// TrackingEvent is an immutable analytics row. Aggregated counters are also
 // kept on the Product row for O(1) reads.
 type TrackingEvent struct {
 	BaseModel
@@ -23,5 +24,6 @@ type TrackingEvent struct {
 	Event      string     `gorm:"size:32;not null;index" json:"event"`
 	IP         string     `gorm:"size:64" json:"ip"`
 	UserAgent  string     `gorm:"size:500" json:"user_agent"`
+	Referrer   string     `gorm:"size:500" json:"referrer"`
 	OccurredAt time.Time  `gorm:"not null;index" json:"occurred_at"`
 }

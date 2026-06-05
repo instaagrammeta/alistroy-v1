@@ -15,11 +15,9 @@ const (
 	CtxRole   = "auth.role"
 )
 
-// RequireAuth verifies the access token. The request is rejected if the token
-// is missing or invalid.
 func RequireAuth(jm *appjwt.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, ok := parseFromHeader(c, jm)
+		claims, ok := parse(c, jm)
 		if !ok {
 			return
 		}
@@ -29,21 +27,20 @@ func RequireAuth(jm *appjwt.Manager) gin.HandlerFunc {
 	}
 }
 
-// RequireRoles allows access only if the authenticated user has one of the given roles.
 func RequireRoles(jm *appjwt.Manager, roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, ok := parseFromHeader(c, jm)
+		claims, ok := parse(c, jm)
 		if !ok {
 			return
 		}
-		match := false
+		matched := false
 		for _, r := range roles {
 			if claims.Role == r {
-				match = true
+				matched = true
 				break
 			}
 		}
-		if !match {
+		if !matched {
 			httpx.Forbidden(c, "insufficient permissions")
 			return
 		}
@@ -53,30 +50,25 @@ func RequireRoles(jm *appjwt.Manager, roles ...string) gin.HandlerFunc {
 	}
 }
 
-// OptionalAuth populates user id/role if a valid token is present, but never blocks.
 func OptionalAuth(jm *appjwt.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := extractToken(c)
-		if token == "" {
-			c.Next()
-			return
-		}
-		claims, err := jm.Parse(token)
-		if err == nil && claims.Type == appjwt.AccessToken {
-			c.Set(CtxUserID, claims.UserID)
-			c.Set(CtxRole, claims.Role)
+		if tok := extract(c); tok != "" {
+			if claims, err := jm.Parse(tok); err == nil && claims.Type == appjwt.AccessToken {
+				c.Set(CtxUserID, claims.UserID)
+				c.Set(CtxRole, claims.Role)
+			}
 		}
 		c.Next()
 	}
 }
 
-func parseFromHeader(c *gin.Context, jm *appjwt.Manager) (*appjwt.Claims, bool) {
-	token := extractToken(c)
-	if token == "" {
+func parse(c *gin.Context, jm *appjwt.Manager) (*appjwt.Claims, bool) {
+	tok := extract(c)
+	if tok == "" {
 		httpx.Unauthorized(c, "missing token")
 		return nil, false
 	}
-	claims, err := jm.Parse(token)
+	claims, err := jm.Parse(tok)
 	if err != nil {
 		httpx.Unauthorized(c, "invalid token")
 		return nil, false
@@ -88,26 +80,22 @@ func parseFromHeader(c *gin.Context, jm *appjwt.Manager) (*appjwt.Claims, bool) 
 	return claims, true
 }
 
-func extractToken(c *gin.Context) string {
+func extract(c *gin.Context) string {
 	h := c.GetHeader("Authorization")
-	if h == "" {
-		return ""
+	const p = "Bearer "
+	if strings.HasPrefix(h, p) {
+		return strings.TrimSpace(h[len(p):])
 	}
-	const prefix = "Bearer "
-	if !strings.HasPrefix(h, prefix) {
-		return ""
-	}
-	return strings.TrimSpace(h[len(prefix):])
+	// allow token via query for websocket upgrades
+	return c.Query("token")
 }
 
-// MustUserID returns the authenticated user's UUID. Caller must ensure RequireAuth ran.
 func MustUserID(c *gin.Context) uuid.UUID {
 	v, _ := c.Get(CtxUserID)
 	id, _ := v.(uuid.UUID)
 	return id
 }
 
-// Role returns the authenticated user's role (empty if anonymous).
 func Role(c *gin.Context) string {
 	v, _ := c.Get(CtxRole)
 	r, _ := v.(string)

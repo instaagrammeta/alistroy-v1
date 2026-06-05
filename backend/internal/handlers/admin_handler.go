@@ -16,7 +16,6 @@ func NewAdminHandler(u *services.UserService, t *services.TrackingService) *Admi
 	return &AdminHandler{users: u, tracking: t}
 }
 
-// Dashboard — combined totals
 func (h *AdminHandler) Dashboard(c *gin.Context) {
 	totals, err := h.tracking.GlobalTotals(c.Request.Context())
 	if err != nil {
@@ -26,20 +25,14 @@ func (h *AdminHandler) Dashboard(c *gin.Context) {
 	httpx.OK(c, totals)
 }
 
-// Users
 func (h *AdminHandler) ListUsers(c *gin.Context) {
 	page, size := paginate(c)
-	items, total, err := h.users.List(c.Request.Context(), services.ListUsersInput{
-		Role:     c.Query("role"),
-		Search:   c.Query("q"),
-		Page:     page,
-		PageSize: size,
-	})
+	items, total, err := h.users.List(c.Request.Context(), c.Query("role"), c.Query("status"), c.Query("q"), page, size)
 	if err != nil {
 		mapServiceError(c, err)
 		return
 	}
-	httpx.List(c, items, newPagination(page, size, total))
+	httpx.List(c, items, httpx.NewPagination(page, size, total))
 }
 
 func (h *AdminHandler) GetUser(c *gin.Context) {
@@ -66,11 +59,7 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 	u, err := h.users.AdminUpdate(c.Request.Context(), id, services.AdminUpdateUserInput{
-		Name:     req.Name,
-		Phone:    req.Phone,
-		Role:     req.Role,
-		IsActive: req.IsActive,
-		Password: req.Password,
+		Name: req.Name, Phone: req.Phone, Status: req.Status, Password: req.Password,
 	})
 	if err != nil {
 		mapServiceError(c, err)

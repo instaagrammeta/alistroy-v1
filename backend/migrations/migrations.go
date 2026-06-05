@@ -13,34 +13,28 @@ import (
 //go:embed *.sql
 var FS embed.FS
 
-// Run executes every *.up.sql migration in lexical order.
-// Migrations are written to be idempotent (CREATE TABLE IF NOT EXISTS, etc.).
+// Run executes every *.up.sql migration in lexical order. Files are
+// idempotent (CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS).
 //
-// The pgx driver does not support multiple SQL statements in a single
-// prepared-statement Exec, so we split each migration file into individual
-// statements (one per terminating semicolon) and execute them one by one
-// against the underlying *sql.DB (bypassing GORM's prepared-statement cache).
+// We split each file by `;` and run each statement individually against the
+// underlying *sql.DB because pgx does not support multi-statement Exec in a
+// single prepared call.
 func Run(db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {
 		return fmt.Errorf("get sql.DB: %w", err)
 	}
-
 	entries, err := FS.ReadDir(".")
 	if err != nil {
 		return fmt.Errorf("read migrations: %w", err)
 	}
 	var ups []string
 	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if strings.HasSuffix(e.Name(), ".up.sql") {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".up.sql") {
 			ups = append(ups, e.Name())
 		}
 	}
 	sort.Strings(ups)
-
 	for _, name := range ups {
 		b, err := FS.ReadFile(name)
 		if err != nil {
@@ -56,39 +50,34 @@ func Run(db *gorm.DB) error {
 	return nil
 }
 
-// splitStatements splits a SQL script into individual statements separated by
-// `;`. Line comments (-- ...) are stripped. This is intentionally simple: our
-// migrations contain plain DDL only — no string literals containing `;`,
-// no PL/pgSQL function bodies, etc.
+// splitStatements splits a SQL script on `;` boundaries while stripping line
+// comments. Migrations are intentionally simple DDL — no PL/pgSQL bodies, no
+// string literals containing semicolons.
 func splitStatements(sqlText string) []string {
-	var stmts []string
-	var current strings.Builder
-
+	var out []string
+	var cur strings.Builder
 	flush := func() {
-		s := strings.TrimSpace(current.String())
+		s := strings.TrimSpace(cur.String())
 		if s != "" {
-			stmts = append(stmts, s)
+			out = append(out, s)
 		}
-		current.Reset()
+		cur.Reset()
 	}
-
-	for _, rawLine := range strings.Split(sqlText, "\n") {
-		line := stripLineComment(rawLine)
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+	for _, raw := range strings.Split(sqlText, "\n") {
+		line := stripLineComment(raw)
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		current.WriteString(line)
-		current.WriteByte('\n')
-		if strings.HasSuffix(trimmed, ";") {
+		cur.WriteString(line)
+		cur.WriteByte('\n')
+		if strings.HasSuffix(strings.TrimSpace(line), ";") {
 			flush()
 		}
 	}
 	flush()
-	return stmts
+	return out
 }
 
-// stripLineComment removes a trailing `-- ...` portion from a SQL line.
 func stripLineComment(s string) string {
 	if i := strings.Index(s, "--"); i >= 0 {
 		return s[:i]
