@@ -80,37 +80,38 @@ func New(d *Deps) *gin.Engine {
 
 		me.GET("/notifications", d.Notification.List)
 		me.GET("/notifications/unread", d.Notification.UnreadCount)
-		me.POST("/notifications/:id/read", d.Notification.MarkRead)
+		me.POST("/notifications/read/:id", d.Notification.MarkRead)
 		me.POST("/notifications/read-all", d.Notification.MarkAllRead)
 		me.GET("/notifications/socket", d.NotifySocket.Socket)
 	}
 
 	// ---------- Public catalog ----------
+	// NOTE: gin does not allow a static segment and a :param to be siblings of
+	// the same path node, so the by-slug routes get their own clean node and
+	// all helper endpoints live under /catalog/*.
 	v1.GET("/categories", d.Catalog.ListCategories)
-	v1.GET("/categories/popular", d.Catalog.PopularCategories)
 	v1.GET("/categories/:slug", d.Catalog.GetCategoryBySlug)
 	v1.GET("/brands", d.Catalog.ListBrands)
 	v1.GET("/banners", d.Banner.Public)
 	v1.GET("/settings/public", d.Setting.Public)
 
 	v1.GET("/sellers", d.Seller.List)
-	v1.GET("/sellers/top", d.Seller.Top)
 	v1.GET("/sellers/:slug", d.Seller.GetBySlug)
 
 	v1.GET("/products", d.Product.List)
-	v1.GET("/products/price-bounds", d.Product.PriceBounds)
 	v1.GET("/products/:slug", d.Product.GetBySlug)
 
-	// by-id read paths used after fetching a product detail
-	byID := v1.Group("/products/id/:id")
+	// Catalog helper endpoints (kept off the :slug nodes).
+	catalog := v1.Group("/catalog")
 	{
-		byID.GET("/related", d.Product.Related)
-		byID.GET("/reviews", d.Review.ListForProduct)
-		byID.POST("/track", middleware.OptionalAuth(d.JWT), d.Tracking.Track)
+		catalog.GET("/popular-categories", d.Catalog.PopularCategories)
+		catalog.GET("/top-sellers", d.Seller.Top)
+		catalog.GET("/price-bounds", d.Product.PriceBounds)
+		catalog.GET("/subcategories/:id", d.Catalog.ListSubcategories)
+		catalog.GET("/product/:id/related", d.Product.Related)
+		catalog.GET("/product/:id/reviews", d.Review.ListForProduct)
+		catalog.POST("/product/:id/track", middleware.OptionalAuth(d.JWT), d.Tracking.Track)
 	}
-
-	// subcategories for a category (public)
-	v1.GET("/categories/id/:id/subcategories", d.Catalog.ListSubcategories)
 
 	// ---------- Authenticated customer actions ----------
 	user := v1.Group("", middleware.RequireAuth(d.JWT))
@@ -120,7 +121,7 @@ func New(d *Deps) *gin.Engine {
 		user.DELETE("/favorites/:id", d.Favorite.Remove)
 		user.GET("/favorites/:id/has", d.Favorite.Has)
 
-		user.POST("/products/id/:id/reviews", d.Review.Create)
+		user.POST("/catalog/product/:id/reviews", d.Review.Create)
 	}
 
 	// customer-only (must have customer profile)
