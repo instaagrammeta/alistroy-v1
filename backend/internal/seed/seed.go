@@ -22,7 +22,10 @@ func Run(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
 	if err := seedSettings(ctx, db, cfg); err != nil {
 		return err
 	}
-	return seedCategories(ctx, db)
+	if err := seedCategories(ctx, db); err != nil {
+		return err
+	}
+	return seedDefaultBanners(ctx, db)
 }
 
 func seedAdmin(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
@@ -156,6 +159,43 @@ func seedCategories(ctx context.Context, db *gorm.DB) error {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if err := db.WithContext(ctx).Create(&models.Category{
 				Slug: c.Slug, NameTJ: c.TJ, NameRU: c.RU, SortOrder: c.Order, Active: true,
+			}).Error; err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// seedDefaultBanners creates a single set of default homepage feature banners
+// (the "Easy ordering / Delivery / Best prices / Quality" row) on first boot.
+// The banners are then editable from the admin panel like any other.
+func seedDefaultBanners(ctx context.Context, db *gorm.DB) error {
+	defaults := []struct {
+		TJ, RU         string
+		DescTJ, DescRU string
+	}{
+		{"Хариди осон", "Лёгкие покупки", "Якчанд клик ва шумо тайёр", "Несколько кликов — и готово"},
+		{"Расонидан", "Доставка", "Ба тамоми шаҳр", "По всему городу"},
+		{"Нархҳои беҳтарин", "Лучшие цены", "Дар бозори Тоҷикистон", "На рынке Таджикистана"},
+		{"Сифати кафолатнок", "Гарантия качества", "Молҳои санҷидашуда", "Только проверенный товар"},
+	}
+	for i, d := range defaults {
+		var existing models.Banner
+		err := db.WithContext(ctx).
+			Where("position = ? AND title_tj = ?", models.BannerPositionFeatures, d.TJ).
+			First(&existing).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := db.WithContext(ctx).Create(&models.Banner{
+				Position:      models.BannerPositionFeatures,
+				TitleTJ:       d.TJ,
+				TitleRU:       d.RU,
+				DescriptionTJ: d.DescTJ,
+				DescriptionRU: d.DescRU,
+				SortOrder:     (i + 1) * 10,
+				Active:        true,
 			}).Error; err != nil {
 				return err
 			}

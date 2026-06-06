@@ -34,11 +34,12 @@ const (
 	OrderStatusCancelled  = "cancelled"
 
 	BannerPositionHero        = "hero"
+	BannerPositionFeatures    = "features" // sub-banner row with icons (free shipping etc)
 	BannerPositionSide        = "side"
 	BannerPositionMidLarge    = "mid_large"
 	BannerPositionMidSmall    = "mid_small"
 	BannerPositionFooter      = "footer"
-	BannerPositionCategoryRow = "category_row"
+	BannerPositionCategoryRow = "category_row" // square category tiles 1000x1000
 
 	TxKindIncome   = "income"
 	TxKindExpense  = "expense"

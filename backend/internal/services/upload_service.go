@@ -18,14 +18,22 @@ type UploadService struct {
 	maxBytes   int64
 }
 
+// Maximum upload size hard cap (in addition to per-instance MaxSizeMB).
+// Mirrors gin's MaxMultipartMemory + nginx client_max_body_size.
+const HardMaxBytes int64 = 64 * 1024 * 1024
+
 func NewUploadService(dir, publicBase string, maxMB int64) (*UploadService, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
+	cap := maxMB * 1024 * 1024
+	if cap <= 0 || cap > HardMaxBytes {
+		cap = HardMaxBytes
+	}
 	return &UploadService{
 		dir:        dir,
 		publicBase: strings.TrimRight(publicBase, "/"),
-		maxBytes:   maxMB * 1024 * 1024,
+		maxBytes:   cap,
 	}, nil
 }
 

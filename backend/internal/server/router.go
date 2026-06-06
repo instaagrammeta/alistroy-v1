@@ -44,6 +44,8 @@ func New(d *Deps) *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
+	// Allow up to 64 MB multipart uploads (product/banner images can be 50 MB).
+	r.MaxMultipartMemory = 64 << 20
 	r.Use(gin.Recovery())
 	if d.Cfg.LogLevel == "debug" {
 		r.Use(gin.Logger())

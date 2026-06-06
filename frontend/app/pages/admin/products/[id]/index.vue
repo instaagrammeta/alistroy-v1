@@ -66,7 +66,13 @@ useHead({ title: () => `${productName(product.value)} — Admin` })
   <div v-if="product">
     <div class="flex items-center justify-between mb-4">
       <h1 class="text-2xl font-bold text-ink-900">{{ productName(product) }}</h1>
-      <StatusBadge :status="product.status" />
+      <div class="flex items-center gap-2">
+        <StatusBadge :status="product.status" />
+        <NuxtLink :to="`/admin/products/${id}/edit`" class="btn-outline btn-sm inline-flex items-center gap-1">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          {{ t('common.edit') }}
+        </NuxtLink>
+      </div>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div class="card p-5">

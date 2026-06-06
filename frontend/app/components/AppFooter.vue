@@ -7,7 +7,7 @@ const year = new Date().getFullYear()
 
 <template>
   <footer class="bg-ink-900 text-gray-300 mt-12">
-    <div class="container-page py-12 grid grid-cols-1 md:grid-cols-4 gap-8">
+    <div class="container-page py-12 grid grid-cols-1 md:grid-cols-3 gap-8">
       <div>
         <AppLogo inverted />
         <p class="mt-3 text-sm text-gray-400 leading-relaxed">{{ t('footer.about') }}</p>
@@ -17,14 +17,8 @@ const year = new Date().getFullYear()
         <ul class="space-y-2 text-sm">
           <li><NuxtLink to="/products" class="hover:text-white">{{ t('nav.catalog') }}</NuxtLink></li>
           <li><NuxtLink to="/categories" class="hover:text-white">{{ t('nav.categories') }}</NuxtLink></li>
-          <li><NuxtLink to="/sellers" class="hover:text-white">{{ t('nav.sellers') }}</NuxtLink></li>
-          <li><NuxtLink to="/search" class="hover:text-white">{{ t('nav.search') }}</NuxtLink></li>
-        </ul>
-      </div>
-      <div>
-        <h4 class="font-semibold text-white mb-3">{{ t('footer.for_sellers') }}</h4>
-        <ul class="space-y-2 text-sm">
-          <li><NuxtLink to="/seller" class="hover:text-white">{{ t('nav.seller_panel') }}</NuxtLink></li>
+          <li><NuxtLink to="/favorites" class="hover:text-white">{{ t('nav.favorites') }}</NuxtLink></li>
+          <li><NuxtLink to="/cart" class="hover:text-white">{{ t('nav.cart') }}</NuxtLink></li>
         </ul>
       </div>
       <div>
