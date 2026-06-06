@@ -154,16 +154,31 @@ func seedCategories(ctx context.Context, db *gorm.DB) error {
 		{"finishing", "Маводи ороишӣ", "Отделочные материалы", 150},
 	}
 	for _, c := range cats {
+		// Look up the category INCLUDING soft-deleted rows so we don't try to
+		// re-INSERT a slug that's already taken by a tombstoned record.
 		var existing models.Category
-		err := db.WithContext(ctx).Where("slug = ?", c.Slug).First(&existing).Error
+		err := db.WithContext(ctx).Unscoped().Where("slug = ?", c.Slug).First(&existing).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if err := db.WithContext(ctx).Create(&models.Category{
 				Slug: c.Slug, NameTJ: c.TJ, NameRU: c.RU, SortOrder: c.Order, Active: true,
 			}).Error; err != nil {
 				return err
 			}
-		} else if err != nil {
+			continue
+		}
+		if err != nil {
 			return err
+		}
+		// If the row was soft-deleted, restore + refresh it; otherwise leave it alone.
+		if existing.DeletedAt.Valid {
+			existing.DeletedAt.Valid = false
+			existing.NameTJ = c.TJ
+			existing.NameRU = c.RU
+			existing.SortOrder = c.Order
+			existing.Active = true
+			if err := db.WithContext(ctx).Unscoped().Save(&existing).Error; err != nil {
+				return err
+			}
 		}
 	}
 	return nil
