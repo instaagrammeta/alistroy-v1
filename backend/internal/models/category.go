@@ -11,10 +11,10 @@ type Category struct {
 	DescriptionRU string `gorm:"type:text" json:"description_ru"`
 	IconURL       string `gorm:"size:500" json:"icon_url"`
 	BannerURL     string `gorm:"size:500" json:"banner_url"`
-	SEOTitleTJ    string `gorm:"size:255" json:"seo_title_tj"`
-	SEOTitleRU    string `gorm:"size:255" json:"seo_title_ru"`
-	SEODescTJ     string `gorm:"type:text" json:"seo_description_tj"`
-	SEODescRU     string `gorm:"type:text" json:"seo_description_ru"`
+	SEOTitleTJ    string `gorm:"column:seo_title_tj;size:255" json:"seo_title_tj"`
+	SEOTitleRU    string `gorm:"column:seo_title_ru;size:255" json:"seo_title_ru"`
+	SEODescTJ     string `gorm:"column:seo_description_tj;type:text" json:"seo_description_tj"`
+	SEODescRU     string `gorm:"column:seo_description_ru;type:text" json:"seo_description_ru"`
 	SortOrder     int    `gorm:"not null;default:0;index" json:"sort_order"`
 	Active        bool   `gorm:"not null;default:true;index" json:"active"`
 
