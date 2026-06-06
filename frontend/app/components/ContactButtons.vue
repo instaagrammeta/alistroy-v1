@@ -7,7 +7,7 @@ const { telLink, waLink, tgLink } = useFormatters()
 
 const track = async (event: 'phone_click' | 'whatsapp_click' | 'telegram_click') => {
   try {
-    await $fetch(`/products/id/${props.product.id}/track`, {
+    await $fetch(`/catalog/product/${props.product.id}/track`, {
       baseURL: useApiBase(), method: 'POST', body: { event },
     })
   } catch {}

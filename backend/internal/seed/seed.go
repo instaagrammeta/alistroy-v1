@@ -3,6 +3,7 @@ package seed
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -29,25 +30,46 @@ func seedAdmin(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
 		logger.Warn("seed: admin email/password not set; skipping")
 		return nil
 	}
+	email := strings.ToLower(strings.TrimSpace(cfg.Admin.Email))
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.Admin.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	// Look the admin up by email OR the reserved "admin" login.
 	var existing models.User
-	err := db.WithContext(ctx).Where("email = ?", cfg.Admin.Email).First(&existing).Error
+	err = db.WithContext(ctx).
+		Where("email = ? OR login = ?", email, "admin").
+		First(&existing).Error
+
 	if err == nil {
-		if existing.Role != models.RoleAdmin || existing.Status != models.UserStatusActive {
-			existing.Role = models.RoleAdmin
-			existing.Status = models.UserStatusActive
-			db.WithContext(ctx).Save(&existing)
+		// Keep the bootstrap admin credentials in sync with the .env file on
+		// every boot so the documented ADMIN_EMAIL / ADMIN_PASSWORD always work
+		// (e.g. after the password is changed in .env or the DB predates a fix).
+		existing.Email = email
+		existing.Login = "admin"
+		existing.PasswordHash = string(hash)
+		existing.Role = models.RoleAdmin
+		existing.Status = models.UserStatusActive
+		if existing.Phone == "" {
+			existing.Phone = cfg.Admin.Phone
 		}
+		if existing.Name == "" {
+			existing.Name = cfg.Admin.Name
+		}
+		if err := db.WithContext(ctx).Save(&existing).Error; err != nil {
+			return err
+		}
+		logger.Info("seed: admin account synced", "email", email)
 		return nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.Admin.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
+
 	u := &models.User{
-		Email:        cfg.Admin.Email,
+		Email:        email,
 		Phone:        cfg.Admin.Phone,
 		Login:        "admin",
 		PasswordHash: string(hash),
@@ -59,7 +81,7 @@ func seedAdmin(ctx context.Context, db *gorm.DB, cfg *config.Config) error {
 	if err := db.WithContext(ctx).Create(u).Error; err != nil {
 		return err
 	}
-	logger.Info("seed: admin account created", "email", cfg.Admin.Email)
+	logger.Info("seed: admin account created", "email", email)
 	return nil
 }
 

@@ -15,21 +15,21 @@ import (
 type Level int
 
 const (
-	Debug Level = iota
-	Info
-	Warn
-	Error
+	LevelDebug Level = iota
+	LevelInfo
+	LevelWarn
+	LevelError
 )
 
 func (l Level) String() string {
 	switch l {
-	case Debug:
+	case LevelDebug:
 		return "DEBUG"
-	case Info:
+	case LevelInfo:
 		return "INFO "
-	case Warn:
+	case LevelWarn:
 		return "WARN "
-	case Error:
+	case LevelError:
 		return "ERROR"
 	}
 	return "?"
@@ -38,15 +38,15 @@ func (l Level) String() string {
 func parseLevel(s string) Level {
 	switch strings.ToLower(s) {
 	case "debug":
-		return Debug
+		return LevelDebug
 	case "info":
-		return Info
+		return LevelInfo
 	case "warn", "warning":
-		return Warn
+		return LevelWarn
 	case "error":
-		return Error
+		return LevelError
 	}
-	return Info
+	return LevelInfo
 }
 
 // Logger is the package-level logger.
@@ -97,10 +97,10 @@ func formatKV(kv ...any) string {
 	return strings.Join(parts, " ")
 }
 
-func (l *Logger) Debug(msg string, kv ...any) { l.write(Debug, msg, kv...) }
-func (l *Logger) Info(msg string, kv ...any)  { l.write(Info, msg, kv...) }
-func (l *Logger) Warn(msg string, kv ...any)  { l.write(Warn, msg, kv...) }
-func (l *Logger) Error(msg string, kv ...any) { l.write(Error, msg, kv...) }
+func (l *Logger) Debug(msg string, kv ...any) { l.write(LevelDebug, msg, kv...) }
+func (l *Logger) Info(msg string, kv ...any)  { l.write(LevelInfo, msg, kv...) }
+func (l *Logger) Warn(msg string, kv ...any)  { l.write(LevelWarn, msg, kv...) }
+func (l *Logger) Error(msg string, kv ...any) { l.write(LevelError, msg, kv...) }
 
 // Convenience package-level functions.
 func Debug(msg string, kv ...any) { std.Debug(msg, kv...) }

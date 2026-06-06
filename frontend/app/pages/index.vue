@@ -8,10 +8,10 @@ const fetchApi = (url: string, query?: Record<string, any>) => $fetch(url, { bas
 
 const { data: bannersRes } = await useAsyncData('home-banners', () => fetchApi('/banners'))
 const { data: catsRes } = await useAsyncData('home-cats', () => fetchApi('/categories'))
-const { data: popularRes } = await useAsyncData('home-popular', () => fetchApi('/categories/popular', { limit: 12 }))
+const { data: popularRes } = await useAsyncData('home-popular', () => fetchApi('/catalog/popular-categories', { limit: 12 }))
 const { data: featuredRes } = await useAsyncData('home-featured', () => fetchApi('/products', { featured: true, page_size: 12 }))
 const { data: latestRes } = await useAsyncData('home-latest', () => fetchApi('/products', { page_size: 12, sort: 'newest' }))
-const { data: topRes } = await useAsyncData('home-top', () => fetchApi('/sellers/top', { limit: 6 }))
+const { data: topRes } = await useAsyncData('home-top', () => fetchApi('/catalog/top-sellers', { limit: 6 }))
 
 const banners = computed<Record<string, Banner[]>>(() => (bannersRes.value as any)?.data || {})
 const heroBanners = computed(() => banners.value.hero || [])

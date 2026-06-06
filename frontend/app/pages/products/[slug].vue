@@ -23,12 +23,12 @@ const avgRating = computed<number>(() => (bundle.value as any)?.data?.avg_rating
 const reviewCount = computed<number>(() => (bundle.value as any)?.data?.review_count ?? 0)
 
 const { data: relatedRes } = await useAsyncData(`product-${slug}-related`, () =>
-  $fetch(`/products/id/${product.value?.id}/related`, { baseURL: useApiBase(), query: { limit: 10 } })
+  $fetch(`/catalog/product/${product.value?.id}/related`, { baseURL: useApiBase(), query: { limit: 10 } })
 )
 const related = computed<Product[]>(() => (relatedRes.value as any)?.data || [])
 
 const { data: reviewsRes, refresh: refreshReviews } = await useAsyncData(`product-${slug}-reviews`, () =>
-  $fetch(`/products/id/${product.value?.id}/reviews`, { baseURL: useApiBase(), query: { page_size: 20 } })
+  $fetch(`/catalog/product/${product.value?.id}/reviews`, { baseURL: useApiBase(), query: { page_size: 20 } })
 )
 const reviews = computed<Review[]>(() => (reviewsRes.value as any)?.data || [])
 
@@ -46,7 +46,7 @@ useHead(() => ({
 onMounted(async () => {
   if (!product.value) return
   try {
-    await $fetch(`/products/id/${product.value.id}/track`, { baseURL: useApiBase(), method: 'POST', body: { event: 'view' } })
+    await $fetch(`/catalog/product/${product.value.id}/track`, { baseURL: useApiBase(), method: 'POST', body: { event: 'view' } })
   } catch {}
 })
 
@@ -68,7 +68,7 @@ const reviewSent = ref(false)
 const submitReview = async () => {
   if (!auth.isAuthenticated) return router.push({ path: '/login', query: { redirect: route.fullPath } })
   try {
-    await useApi()(`/products/id/${product.value.id}/reviews`, { method: 'POST', body: { rating: newReview.rating, comment: newReview.comment } })
+    await useApi()(`/catalog/product/${product.value.id}/reviews`, { method: 'POST', body: { rating: newReview.rating, comment: newReview.comment } })
     reviewSent.value = true
     newReview.comment = ''; newReview.rating = 5
     await refreshReviews()
