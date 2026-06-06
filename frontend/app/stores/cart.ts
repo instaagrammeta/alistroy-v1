@@ -35,7 +35,7 @@ export const useCartStore = defineStore('cart', {
       await this.load()
     },
     async clear() {
-      await useApi()('/customer/cart', { method: 'DELETE' })
+      await useApi()('/customer/cart/clear', { method: 'POST' })
       this.items = []
     },
   },

@@ -131,8 +131,8 @@ func New(d *Deps) *gin.Engine {
 	{
 		cust.GET("/cart", d.Cart.List)
 		cust.POST("/cart", d.Cart.Set)
+		cust.POST("/cart/clear", d.Cart.Clear)
 		cust.DELETE("/cart/:id", d.Cart.Remove)
-		cust.DELETE("/cart", d.Cart.Clear)
 
 		cust.POST("/checkout", d.Order.Checkout)
 		cust.GET("/orders", d.Order.MyOrders)
